@@ -1,6 +1,21 @@
 {
- "updated": "2026-11-02T12:13:19+00:00",
+ "updated": "2026-11-02T22:14:24+00:00",
  "pending": [
+  {
+   "symbol": "PYPL",
+   "signal_date": "2026-11-02",
+   "ref_price": 58.78,
+   "atr": 1.4349,
+   "rsi": 64.3,
+   "vol_ratio": 1.26,
+   "target": 64.52,
+   "stop": 55.91,
+   "est_profit_net": 64.5,
+   "est_loss_net": -58.58,
+   "score": 5.18
+  }
+ ],
+ "open": [
   {
    "symbol": "VRTX",
    "signal_date": "2026-10-30",
@@ -8,11 +23,14 @@
    "atr": 16.995,
    "rsi": 67.4,
    "vol_ratio": 2.35,
-   "target": 626.86,
-   "stop": 524.89,
+   "target": 627.91,
+   "stop": 525.94,
    "est_profit_net": 82.16,
    "est_loss_net": -70.51,
-   "score": 6.16
+   "score": 6.16,
+   "entry_date": "2026-11-02",
+   "entry": 559.93,
+   "last_price": 553.15
   },
   {
    "symbol": "MDLZ",
@@ -21,11 +39,14 @@
    "atr": 1.4779,
    "rsi": 61.2,
    "vol_ratio": 2.05,
-   "target": 70.85,
-   "stop": 61.98,
+   "target": 71.21,
+   "stop": 62.34,
    "est_profit_net": 59.62,
    "est_loss_net": -55.29,
-   "score": 6.0
+   "score": 6.0,
+   "entry_date": "2026-11-02",
+   "entry": 65.3,
+   "last_price": 66.38
   },
   {
    "symbol": "CCEP",
@@ -34,13 +55,15 @@
    "atr": 2.4929,
    "rsi": 66.0,
    "vol_ratio": 1.46,
-   "target": 123.19,
-   "stop": 108.23,
+   "target": 124.42,
+   "stop": 109.46,
    "est_profit_net": 57.45,
    "est_loss_net": -53.82,
-   "score": 5.34
+   "score": 5.34,
+   "entry_date": "2026-11-02",
+   "entry": 114.44,
+   "last_price": 115.58
   }
  ],
- "open": [],
  "closed": []
 }
