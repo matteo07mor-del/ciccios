@@ -1,1 +1,46 @@
-{"updated": null, "pending": [], "open": [], "closed": []}
+{
+ "updated": "2026-11-02T12:13:19+00:00",
+ "pending": [
+  {
+   "symbol": "VRTX",
+   "signal_date": "2026-10-30",
+   "ref_price": 558.88,
+   "atr": 16.995,
+   "rsi": 67.4,
+   "vol_ratio": 2.35,
+   "target": 626.86,
+   "stop": 524.89,
+   "est_profit_net": 82.16,
+   "est_loss_net": -70.51,
+   "score": 6.16
+  },
+  {
+   "symbol": "MDLZ",
+   "signal_date": "2026-10-30",
+   "ref_price": 64.94,
+   "atr": 1.4779,
+   "rsi": 61.2,
+   "vol_ratio": 2.05,
+   "target": 70.85,
+   "stop": 61.98,
+   "est_profit_net": 59.62,
+   "est_loss_net": -55.29,
+   "score": 6.0
+  },
+  {
+   "symbol": "CCEP",
+   "signal_date": "2026-10-30",
+   "ref_price": 113.22,
+   "atr": 2.4929,
+   "rsi": 66.0,
+   "vol_ratio": 1.46,
+   "target": 123.19,
+   "stop": 108.23,
+   "est_profit_net": 57.45,
+   "est_loss_net": -53.82,
+   "score": 5.34
+  }
+ ],
+ "open": [],
+ "closed": []
+}
