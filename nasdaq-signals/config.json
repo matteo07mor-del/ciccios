@@ -1,0 +1,11 @@
+{
+  "ntfy_topic": "nasdaq-segnali-k7q2x9m4",
+  "position_eur": 1000,
+  "tax_rate": 0.26,
+  "fx_fee_per_side": 0.005,
+  "max_new_signals_per_day": 3,
+  "max_hold_days": 20,
+  "stop_atr": 2.0,
+  "target_atr": 4.0,
+  "min_net_profit_eur": 15
+}
