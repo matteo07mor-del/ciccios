@@ -89,7 +89,8 @@
 
   <p class="warn">Strumento statistico, non consulenza finanziaria. I segnali non garantiscono profitti
   e la performance passata non anticipa quella futura. Importi stimati per una posizione
-  fissa; il cambio EUR/USD non è incluso. I prezzi live arrivano da Yahoo Finance e possono avere
+  fissa, con tasse 26%, cambio, commissioni e (se CFD o leva) interessi notturni eToro; il
+  cambio EUR/USD non è incluso. I prezzi live arrivano da Yahoo Finance e possono avere
   qualche minuto di ritardo.</p>
 </main>
 
@@ -98,15 +99,22 @@ const eur = v => (v>=0?'+':'') + v.toFixed(0) + ' €';
 const usd = v => v.toFixed(2) + ' $';
 const cls = v => v>=0 ? 'up' : 'down';
 const $ = id => document.getElementById(id);
-const DEF = { position_eur:1000, fx_fee_per_side:0.005, tax_rate:0.26 };
+const DEF = { position_eur:1000, fx_fee_per_side:0.005, tax_rate:0.26, leverage:1, cfd:false,
+  commission_per_side_eur:0.9, cfd_spread_pct:0.0015, cfd_markup_pct:6.4, cfd_benchmark_pct:4.0,
+  ivafe_rate:0.002, est_hold_days:28 };
 let CFG = DEF, DATA = null, LIVE = {};   // LIVE[sym] = {p, t, via}
 
-// stessa formula dello scanner (scanner.py -> net_result)
-function netEst(entry, exit_) {
-  const pos = CFG.position_eur, ret = exit_/entry - 1;
-  const pre = pos*ret - (pos*CFG.fx_fee_per_side + pos*(1+ret)*CFG.fx_fee_per_side);
-  return pre - Math.max(pre,0)*CFG.tax_rate;
+// stessa formula dello scanner (scanner.py -> net_result); days = giorni di calendario
+function netEst(entry, exit_, days) {
+  const pos = CFG.position_eur, lev = CFG.leverage || 1, cfd = !!CFG.cfd || lev > 1;
+  const exposure = pos*lev, ret = exit_/entry - 1, gross = exposure*ret;
+  let costs = pos*CFG.fx_fee_per_side + Math.max(pos + gross, 0)*CFG.fx_fee_per_side;
+  if (cfd) costs += exposure*CFG.cfd_spread_pct*2 + exposure*(CFG.cfd_markup_pct + CFG.cfd_benchmark_pct)/100/365*days;
+  else     costs += CFG.commission_per_side_eur*2 + exposure*(1 + ret)*CFG.ivafe_rate*days/365;
+  const pre = gross - costs;
+  return pre - Math.max(pre, 0)*CFG.tax_rate;
 }
+const daysHeld = s => Math.max(0, Math.round((Date.now() - new Date(s.entry_date)) / 86400000));
 
 function listRows(el, items, render, emptyText) {
   el.innerHTML = items.length ? items.map(render).join('') : '<div class="empty">'+emptyText+'</div>';
@@ -181,7 +189,7 @@ function fillPosition(s) {
   const q = LIVE[s.symbol];
   const price = q ? q.p : (s.last_price || s.entry);
   const chg = (price/s.entry - 1) * 100;
-  const net = netEst(s.entry, price);
+  const net = netEst(s.entry, price, daysHeld(s));
   el.querySelector('.price').textContent = usd(price);
   el.querySelector('.tag').textContent = q ? 'live' : 'ultima chiusura';
   const pc = el.querySelector('.pc'); pc.textContent = (chg>=0?'+':'') + chg.toFixed(2) + '%'; pc.className = 'pc ' + cls(chg);
@@ -248,11 +256,11 @@ function render(d) {
       <div class="scale"><span>Stop ${usd(s.stop)}</span><span>Obiettivo ${usd(s.target)}</span></div>
       <div class="vals">
         <div>Ingresso <b>${usd(s.entry)}</b></div>
-        <div>Se obiettivo <b class="up">${eur(netEst(s.entry, s.target))}</b></div>
+        <div>Se obiettivo <b class="up">${eur(netEst(s.entry, s.target, CFG.est_hold_days))}</b></div>
         <div>ATR (volatilità) <b>${s.atr}</b></div>
-        <div>Se stop <b class="down">${eur(netEst(s.entry, s.stop))}</b></div>
+        <div>Se stop <b class="down">${eur(netEst(s.entry, s.stop, CFG.est_hold_days))}</b></div>
         <div>RSI al segnale <b>${s.rsi}</b></div>
-        <div>Scadenza <b>20 giorni di borsa</b></div>
+        <div>Costi <b>${CFG.cfd || CFG.leverage > 1 ? 'CFD: interessi notturni' : 'azioni reali: no interessi'}</b></div>
       </div>
       <div class="small qt" style="margin-top:6px"></div>
     </div>`;
