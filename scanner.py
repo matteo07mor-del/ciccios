@@ -32,9 +32,22 @@ NASDAQ_100 = (
 
 
 # ----------------------------------------------------------------- utilità
+DEFAULTS = {
+    "position_eur": 1000, "tax_rate": 0.26, "fx_fee_per_side": 0.005,
+    "leverage": 1,                 # 1 = azioni reali senza leva
+    "cfd": False,                  # True = posizione CFD (costi notturni)
+    "commission_per_side_eur": 0.9,  # eToro: 1-2 $ per apertura/chiusura su azioni reali
+    "cfd_spread_pct": 0.0015,      # spread CFD azioni: 0,15% per operazione
+    "cfd_markup_pct": 6.4,         # costo notturno CFD long azioni: 6,4% + benchmark annuo
+    "cfd_benchmark_pct": 4.0,      # benchmark (tasso di riferimento): da verificare
+    "ivafe_rate": 0.002,           # IVAFE 0,2% annuo sul valore (azioni reali)
+    "max_hold_days": 20,
+}
+
+
 def load_config():
     with open(CONFIG_FILE, encoding="utf-8") as f:
-        cfg = json.load(f)
+        cfg = {**DEFAULTS, **json.load(f)}
     if os.environ.get("NTFY_TOPIC"):  # su GitHub il topic sta nei Secrets, non nel repo
         cfg["ntfy_topic"] = os.environ["NTFY_TOPIC"]
     return cfg
@@ -101,21 +114,43 @@ def atr(bars, n=14):
 
 
 # ------------------------------------------------------------ costi e tasse
-def net_result(entry, exit_, cfg):
+def est_days(cfg):
+    """Giorni di calendario di detenzione usati nelle stime (caso peggiore: scadenza)."""
+    return int(cfg.get("est_hold_days", round(cfg["max_hold_days"] * 7 / 5)))
+
+
+def net_result(entry, exit_, cfg, days=0):
     """Risultato netto in EUR su una posizione di cfg['position_eur'].
 
-    Costi: conversione EUR/USD eToro (fx_fee_per_side) all'ingresso e all'uscita.
-    Tasse: 26% sulla plusvalenza. In caso di perdita non si paga nulla
-    (la minusvalenza resta compensabile con altre plusvalenze per 4 anni).
+    days = giorni di calendario in cui la posizione resta aperta.
+    Costi inclusi:
+      - conversione EUR/USD eToro (fx_fee_per_side) in apertura e in chiusura;
+      - azioni reali senza leva: commissione per lato e IVAFE 0,2% annuo
+        (nessun costo notturno);
+      - CFD o leva > 1: spread 0,15% per lato e costo notturno
+        (6,4% + benchmark) / 365 per ogni giorno, sul valore dell'esposizione.
+    Tasse: 26% sulla plusvalenza; in perdita non si paga nulla
+    (la minusvalenza resta compensabile per 4 anni).
     """
     pos = cfg["position_eur"]
+    lev = cfg["leverage"]
+    cfd = bool(cfg["cfd"]) or lev > 1
+    exposure = pos * lev
     ret = exit_ / entry - 1
-    gross = pos * ret
-    fees = pos * cfg["fx_fee_per_side"] + pos * (1 + ret) * cfg["fx_fee_per_side"]
-    pre_tax = gross - fees
+    gross = exposure * ret
+    fx = cfg["fx_fee_per_side"]
+    costs = pos * fx + max(pos + gross, 0) * fx
+    if cfd:
+        costs += exposure * cfg["cfd_spread_pct"] * 2
+        costs += exposure * (cfg["cfd_markup_pct"] + cfg["cfd_benchmark_pct"]) / 100 / 365 * days
+    else:
+        costs += cfg["commission_per_side_eur"] * 2
+        costs += exposure * (1 + ret) * cfg["ivafe_rate"] * days / 365
+    pre_tax = gross - costs
     tax = max(pre_tax, 0) * cfg["tax_rate"]
-    return {"gross": round(gross, 2), "fees": round(fees, 2),
-            "tax": round(tax, 2), "net": round(pre_tax - tax, 2)}
+    return {"gross": round(gross, 2), "fees": round(costs, 2),
+            "tax": round(tax, 2), "pre_tax": round(pre_tax, 2),
+            "net": round(pre_tax - tax, 2)}
 
 
 # ------------------------------------------------------------- segnali
@@ -142,8 +177,9 @@ def analyze(symbol, bars, cfg):
 
     target = c + cfg["target_atr"] * a
     stop = c - cfg["stop_atr"] * a
-    est = net_result(c, target, cfg)
-    loss = net_result(c, stop, cfg)
+    d = est_days(cfg)
+    est = net_result(c, target, cfg, d)
+    loss = net_result(c, stop, cfg, d)
     if est["net"] < cfg["min_net_profit_eur"]:
         return None
     score = vol_ratio + (c / s50 - 1) * 10 + (70 - abs(r - 60)) / 20
@@ -197,9 +233,11 @@ def update_open(state, data, cfg):
                 exit_date = b["d"]
                 break
         if reason:
-            res = net_result(sig["entry"], exit_price, cfg)
+            held = (datetime.strptime(exit_date, "%Y-%m-%d")
+                    - datetime.strptime(sig["entry_date"], "%Y-%m-%d")).days
+            res = net_result(sig["entry"], exit_price, cfg, held)
             sig.update(exit_date=exit_date, exit=round(exit_price, 2), reason=reason,
-                       result_net=res["net"], tax=res["tax"], fees=res["fees"])
+                       result_net=res["net"], tax=res["tax"], fees=res["fees"], days_held=held)
             state["closed"].append(sig)
             notes.append(sig)
         else:
@@ -231,7 +269,9 @@ def fmt_signal(sig, cfg):
             f"{sig['est_profit_net']:+.0f} EUR su {cfg['position_eur']} EUR\n"
             f"Stop-loss ~{sig['stop']} $ (perdita {sig['est_loss_net']:+.0f} EUR)\n"
             f"Chiudi comunque entro {cfg['max_hold_days']} giorni di borsa.\n"
-            f"Tasse 26% e costi di cambio gia' inclusi.")
+            f"Incluso: tasse 26%, cambio, commissioni e "
+            f"{'interessi notturni CFD' if (cfg['cfd'] or cfg['leverage'] > 1) else 'IVAFE'} "
+            f"(stima su {est_days(cfg)} giorni).")
 
 
 # ---------------------------------------------------------------- main
@@ -270,7 +310,11 @@ def run():
         print("Nasdaq sotto la media a 200 giorni: nessun nuovo segnale.")
 
     # parametri usati dalla dashboard per il profitto netto "se chiudi ora"
-    state["config"] = {k: cfg[k] for k in ("position_eur", "fx_fee_per_side", "tax_rate")}
+    state["config"] = {k: cfg[k] for k in (
+        "position_eur", "fx_fee_per_side", "tax_rate", "leverage", "cfd",
+        "commission_per_side_eur", "cfd_spread_pct", "cfd_markup_pct",
+        "cfd_benchmark_pct", "ivafe_rate")}
+    state["config"]["est_hold_days"] = est_days(cfg)
     save_state(state)
     print(f"Fatto. Aperte: {len(state['open'])}, chiuse: {len(state['closed'])}")
     return 0
