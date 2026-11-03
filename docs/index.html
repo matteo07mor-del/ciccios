@@ -8,7 +8,7 @@
 <title>Segnali Nasdaq</title>
 <style>
   :root { --bg:#0f1720; --card:#18222e; --text:#e6edf3; --mute:#8b9bab;
-          --up:#3fb68b; --down:#e5534b; --line:#4c9be8; }
+          --up:#3fb68b; --down:#e5534b; --line:#4c9be8; --track:#243140; }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--text);
          font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
@@ -25,13 +25,38 @@
   .up { color:var(--up); } .down { color:var(--down); }
   canvas { width:100%; height:220px; display:block; }
   .row { display:flex; justify-content:space-between; gap:10px; padding:10px 0;
-         border-bottom:1px solid #243140; }
+         border-bottom:1px solid var(--track); }
   .row:last-child { border-bottom:0; }
   .tick { font-weight:700; }
   .small { font-size:12.5px; color:var(--mute); }
   .right { text-align:right; }
   .empty { color:var(--mute); padding:8px 0; }
   .warn { font-size:12px; color:var(--mute); margin:26px 0 10px; }
+
+  /* prezzi live */
+  .livebar { display:flex; align-items:center; justify-content:space-between; gap:10px;
+             margin:22px 0 8px; }
+  .livebar h2 { margin:0; }
+  .livebar button { background:var(--card); color:var(--text); border:1px solid var(--track);
+                    border-radius:8px; padding:6px 10px; font:inherit; font-size:13px; cursor:pointer; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--mute);
+         margin-right:6px; vertical-align:middle; }
+  .dot.on { background:var(--up); } .dot.off { background:var(--down); }
+  .pos { padding:12px 0; border-bottom:1px solid var(--track); }
+  .pos:last-child { border-bottom:0; }
+  .pos .head { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
+  .price { font-size:20px; font-weight:700; }
+  .bar { position:relative; height:8px; border-radius:4px; margin:14px 0 4px;
+         background:linear-gradient(90deg, rgba(229,83,75,.55), var(--track) 50%, rgba(63,182,139,.55)); }
+  .bar .mk { position:absolute; top:-4px; width:4px; height:16px; border-radius:2px; background:var(--text);
+             transform:translateX(-2px); transition:left .4s; }
+  .bar .en { position:absolute; top:-2px; width:2px; height:12px; background:var(--mute); transform:translateX(-1px); }
+  .scale { display:flex; justify-content:space-between; font-size:12px; color:var(--mute); }
+  .vals { display:grid; grid-template-columns:repeat(2,1fr); gap:2px 14px; margin-top:8px;
+          font-size:12.5px; color:var(--mute); }
+  .vals b { color:var(--text); font-weight:600; }
+  .tag { font-size:11px; padding:1px 6px; border-radius:6px; background:var(--track); color:var(--mute);
+         margin-left:6px; vertical-align:middle; }
 </style>
 </head>
 <body>
@@ -49,24 +74,39 @@
   <h2>Performance cumulata (netto tasse e costi)</h2>
   <div class="card"><canvas id="chart"></canvas></div>
 
+  <div class="livebar">
+    <h2>Operazioni aperte</h2>
+    <button id="refresh" type="button">Aggiorna ora</button>
+  </div>
+  <div class="sub" id="livestatus" style="margin-bottom:8px"><span class="dot"></span>Prezzi live: in attesa</div>
+  <div class="card" id="open"></div>
+
   <h2>Da comprare domani</h2>
   <div class="card" id="pending"></div>
-
-  <h2>Operazioni aperte</h2>
-  <div class="card" id="open"></div>
 
   <h2>Storico</h2>
   <div class="card" id="closed"></div>
 
   <p class="warn">Strumento statistico, non consulenza finanziaria. I segnali non garantiscono profitti
   e la performance passata non anticipa quella futura. Importi stimati per una posizione
-  fissa; il cambio EUR/USD non è incluso.</p>
+  fissa; il cambio EUR/USD non è incluso. I prezzi live arrivano da Yahoo Finance e possono avere
+  qualche minuto di ritardo.</p>
 </main>
 
 <script>
 const eur = v => (v>=0?'+':'') + v.toFixed(0) + ' €';
+const usd = v => v.toFixed(2) + ' $';
 const cls = v => v>=0 ? 'up' : 'down';
 const $ = id => document.getElementById(id);
+const DEF = { position_eur:1000, fx_fee_per_side:0.005, tax_rate:0.26 };
+let CFG = DEF, DATA = null, LIVE = {};   // LIVE[sym] = {p, t, via}
+
+// stessa formula dello scanner (scanner.py -> net_result)
+function netEst(entry, exit_) {
+  const pos = CFG.position_eur, ret = exit_/entry - 1;
+  const pre = pos*ret - (pos*CFG.fx_fee_per_side + pos*(1+ret)*CFG.fx_fee_per_side);
+  return pre - Math.max(pre,0)*CFG.tax_rate;
+}
 
 function listRows(el, items, render, emptyText) {
   el.innerHTML = items.length ? items.map(render).join('') : '<div class="empty">'+emptyText+'</div>';
@@ -108,7 +148,79 @@ function drawChart(points) {
   if (points.length > 1) g.fillText(points[points.length-1].d, X(points.length)-20, H-6);
 }
 
+/* ---------------- prezzi live ---------------- */
+const YF = 'https://query1.finance.yahoo.com/v8/finance/chart/';
+let route = 0;   // ricorda quale via ha funzionato per ultima
+function routes(sym) {
+  const u = YF + encodeURIComponent(sym) + '?range=1d&interval=1m';
+  return [
+    { name:'diretto', url:u },
+    { name:'proxy 1', url:'https://corsproxy.io/?' + encodeURIComponent(u) },
+    { name:'proxy 2', url:'https://api.allorigins.win/raw?url=' + encodeURIComponent(u) },
+  ];
+}
+async function getQuote(sym) {
+  const list = routes(sym);
+  for (let k = 0; k < list.length; k++) {
+    const r = list[(route + k) % list.length];
+    try {
+      const resp = await fetch(r.url, { cache:'no-store' });
+      if (!resp.ok) continue;
+      const m = (await resp.json()).chart.result[0].meta;
+      if (typeof m.regularMarketPrice !== 'number') continue;
+      route = (route + k) % list.length;
+      return { p:m.regularMarketPrice, t:(m.regularMarketTime||0)*1000, via:r.name };
+    } catch (e) { /* prova la via successiva */ }
+  }
+  return null;
+}
+
+function fillPosition(s) {
+  const el = document.querySelector('.pos[data-sym="'+s.symbol+'"]');
+  if (!el) return;
+  const q = LIVE[s.symbol];
+  const price = q ? q.p : (s.last_price || s.entry);
+  const chg = (price/s.entry - 1) * 100;
+  const net = netEst(s.entry, price);
+  el.querySelector('.price').textContent = usd(price);
+  el.querySelector('.tag').textContent = q ? 'live' : 'ultima chiusura';
+  const pc = el.querySelector('.pc'); pc.textContent = (chg>=0?'+':'') + chg.toFixed(2) + '%'; pc.className = 'pc ' + cls(chg);
+  const nt = el.querySelector('.nt'); nt.textContent = eur(net) + ' netto se chiudi ora'; nt.className = 'nt small ' + cls(net);
+  const span = s.target - s.stop;
+  const pos = Math.max(0, Math.min(1, (price - s.stop)/span));
+  el.querySelector('.mk').style.left = (pos*100) + '%';
+  el.querySelector('.qt').textContent = q && q.t ? 'quotazione delle ' + new Date(q.t).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}) : '';
+}
+
+function fillPending(s) {
+  const el = document.querySelector('.pend[data-sym="'+s.symbol+'"]');
+  if (!el) return;
+  const q = LIVE[s.symbol];
+  if (!q) { el.textContent = ''; return; }
+  const chg = (q.p/s.ref_price - 1) * 100;
+  el.innerHTML = 'ora <b>' + usd(q.p) + '</b> <span class="' + cls(chg) + '">(' + (chg>=0?'+':'') + chg.toFixed(2) + '% dal riferimento)</span>';
+}
+
+async function refreshLive() {
+  if (!DATA) return;
+  const syms = [...new Set([...DATA.open, ...DATA.pending].map(s => s.symbol))];
+  const st = $('livestatus');
+  if (!syms.length) { st.innerHTML = '<span class="dot"></span>Nessuna posizione da seguire'; return; }
+  st.innerHTML = '<span class="dot"></span>Aggiornamento prezzi...';
+  const res = await Promise.all(syms.map(getQuote));
+  let ok = 0;
+  syms.forEach((sym, i) => { if (res[i]) { LIVE[sym] = res[i]; ok++; } });
+  DATA.open.forEach(fillPosition);
+  DATA.pending.forEach(fillPending);
+  const hh = new Date().toLocaleTimeString('it-IT');
+  if (ok === syms.length)      st.innerHTML = '<span class="dot on"></span>Prezzi live aggiornati alle ' + hh + ' (Yahoo Finance, ' + res[0].via + ')';
+  else if (ok > 0)             st.innerHTML = '<span class="dot on"></span>' + ok + '/' + syms.length + ' prezzi aggiornati alle ' + hh + '; gli altri mostrano l\'ultima chiusura';
+  else                         st.innerHTML = '<span class="dot off"></span>Prezzi live non raggiungibili: mostro l\'ultima chiusura salvata dallo scanner';
+}
+
+/* ---------------- rendering ---------------- */
 function render(d) {
+  DATA = d; CFG = Object.assign({}, DEF, d.config || {});
   const closed = [...d.closed].sort((a,b) => a.exit_date.localeCompare(b.exit_date));
   const net = closed.reduce((s,x) => s + x.result_net, 0);
   const wins = closed.filter(x => x.result_net > 0).length;
@@ -117,26 +229,43 @@ function render(d) {
   $('s-n').textContent = closed.length;
   $('s-win').textContent = closed.length ? Math.round(100*wins/closed.length) + '%' : '-';
   $('s-tax').textContent = tax.toFixed(0) + ' €';
-  $('upd').textContent = d.updated ? 'Ultimo aggiornamento: ' + new Date(d.updated).toLocaleString('it-IT') : 'Nessuna scansione ancora eseguita';
+  $('upd').textContent = d.updated ? 'Ultima scansione: ' + new Date(d.updated).toLocaleString('it-IT') : 'Nessuna scansione ancora eseguita';
 
   let cum = 0;
   drawChart(closed.map(x => ({ d:x.exit_date, r:x.result_net, v:(cum += x.result_net) })));
 
+  listRows($('open'), d.open, s => {
+    const enPct = Math.max(0, Math.min(100, (s.entry - s.stop)/(s.target - s.stop)*100));
+    return `<div class="pos" data-sym="${s.symbol}">
+      <div class="head">
+        <div><span class="tick">${s.symbol}</span><span class="tag">...</span>
+          <div class="small">Acquisto del ${s.entry_date} a ${usd(s.entry)}</div></div>
+        <div class="right"><div class="price">-</div>
+          <div class="pc small">-</div></div>
+      </div>
+      <div class="nt small"></div>
+      <div class="bar"><span class="en" style="left:${enPct}%"></span><span class="mk" style="left:${enPct}%"></span></div>
+      <div class="scale"><span>Stop ${usd(s.stop)}</span><span>Obiettivo ${usd(s.target)}</span></div>
+      <div class="vals">
+        <div>Ingresso <b>${usd(s.entry)}</b></div>
+        <div>Se obiettivo <b class="up">${eur(netEst(s.entry, s.target))}</b></div>
+        <div>ATR (volatilità) <b>${s.atr}</b></div>
+        <div>Se stop <b class="down">${eur(netEst(s.entry, s.stop))}</b></div>
+        <div>RSI al segnale <b>${s.rsi}</b></div>
+        <div>Scadenza <b>20 giorni di borsa</b></div>
+      </div>
+      <div class="small qt" style="margin-top:6px"></div>
+    </div>`;
+  }, 'Nessuna operazione aperta.');
+  d.open.forEach(fillPosition);
+
   listRows($('pending'), d.pending, s => `
     <div class="row"><div><div class="tick">${s.symbol}</div>
       <div class="small">Rif. ${s.ref_price} $ · RSI ${s.rsi} · volumi x${s.vol_ratio}</div>
-      <div class="small">Obiettivo ${s.target} $ · Stop ${s.stop} $</div></div>
+      <div class="small">Obiettivo ${s.target} $ · Stop ${s.stop} $</div>
+      <div class="small pend" data-sym="${s.symbol}"></div></div>
       <div class="right"><div class="${cls(s.est_profit_net)}">${eur(s.est_profit_net)}</div>
       <div class="small">stima netta</div></div></div>`, 'Nessun nuovo segnale.');
-
-  listRows($('open'), d.open, s => {
-    const pl = s.last_price ? ((s.last_price/s.entry-1)*100).toFixed(1) : '0.0';
-    return `<div class="row"><div><div class="tick">${s.symbol}</div>
-      <div class="small">Ingresso ${s.entry} $ (${s.entry_date}) · ora ${s.last_price||'-'} $ (${pl}%)</div>
-      <div class="small">Obiettivo ${s.target} $ · Stop ${s.stop} $</div></div>
-      <div class="right"><div class="${cls(s.est_profit_net)}">${eur(s.est_profit_net)}</div>
-      <div class="small">se obiettivo</div></div></div>`;
-  }, 'Nessuna operazione aperta.');
 
   listRows($('closed'), [...closed].reverse(), s => `
     <div class="row"><div><div class="tick">${s.symbol}</div>
@@ -144,11 +273,16 @@ function render(d) {
       <div class="small">${s.entry} $ → ${s.exit} $</div></div>
       <div class="right"><div class="${cls(s.result_net)}">${eur(s.result_net)}</div>
       <div class="small">netto</div></div></div>`, 'Ancora nessuna operazione chiusa.');
+  Object.keys(LIVE).length && d.pending.forEach(fillPending);
 }
 
 fetch('data.json?' + Date.now()).then(r => r.json()).catch(() => ({pending:[],open:[],closed:[],updated:null}))
-  .then(d => { window._d = d; render(d); });
-window.addEventListener('resize', () => window._d && render(window._d));
+  .then(d => { render(d); refreshLive(); });
+window.addEventListener('resize', () => DATA && drawChart((() => { let c = 0;
+  return [...DATA.closed].sort((a,b) => a.exit_date.localeCompare(b.exit_date)).map(x => ({d:x.exit_date, r:x.result_net, v:(c += x.result_net)})); })()));
+$('refresh').addEventListener('click', refreshLive);
+setInterval(() => { if (document.visibilityState === 'visible') refreshLive(); }, 30000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refreshLive(); });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
 </body>
