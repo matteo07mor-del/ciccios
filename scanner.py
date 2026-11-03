@@ -269,6 +269,8 @@ def run():
     else:
         print("Nasdaq sotto la media a 200 giorni: nessun nuovo segnale.")
 
+    # parametri usati dalla dashboard per il profitto netto "se chiudi ora"
+    state["config"] = {k: cfg[k] for k in ("position_eur", "fx_fee_per_side", "tax_rate")}
     save_state(state)
     print(f"Fatto. Aperte: {len(state['open'])}, chiuse: {len(state['closed'])}")
     return 0
