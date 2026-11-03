@@ -1,20 +1,6 @@
 {
- "updated": "2026-11-02T22:14:24+00:00",
- "pending": [
-  {
-   "symbol": "PYPL",
-   "signal_date": "2026-11-02",
-   "ref_price": 58.78,
-   "atr": 1.4349,
-   "rsi": 64.3,
-   "vol_ratio": 1.26,
-   "target": 64.52,
-   "stop": 55.91,
-   "est_profit_net": 64.5,
-   "est_loss_net": -58.58,
-   "score": 5.18
-  }
- ],
+ "updated": "2026-11-03T22:15:44+00:00",
+ "pending": [],
  "open": [
   {
    "symbol": "VRTX",
@@ -30,7 +16,7 @@
    "score": 6.16,
    "entry_date": "2026-11-02",
    "entry": 559.93,
-   "last_price": 553.15
+   "last_price": 530.76
   },
   {
    "symbol": "MDLZ",
@@ -46,7 +32,7 @@
    "score": 6.0,
    "entry_date": "2026-11-02",
    "entry": 65.3,
-   "last_price": 66.38
+   "last_price": 65.12
   },
   {
    "symbol": "CCEP",
@@ -62,8 +48,37 @@
    "score": 5.34,
    "entry_date": "2026-11-02",
    "entry": 114.44,
-   "last_price": 115.58
+   "last_price": 111.56
+  },
+  {
+   "symbol": "PYPL",
+   "signal_date": "2026-11-02",
+   "ref_price": 58.78,
+   "atr": 1.4349,
+   "rsi": 64.3,
+   "vol_ratio": 1.26,
+   "target": 64.52,
+   "stop": 55.91,
+   "est_profit_net": 64.5,
+   "est_loss_net": -58.58,
+   "score": 5.18,
+   "entry_date": "2026-11-03",
+   "entry": 58.78,
+   "last_price": 58.21
   }
  ],
- "closed": []
+ "closed": [],
+ "config": {
+  "position_eur": 1000,
+  "fx_fee_per_side": 0.005,
+  "tax_rate": 0.26,
+  "leverage": 1,
+  "cfd": false,
+  "commission_per_side_eur": 0.9,
+  "cfd_spread_pct": 0.0015,
+  "cfd_markup_pct": 6.4,
+  "cfd_benchmark_pct": 4.0,
+  "ivafe_rate": 0.002,
+  "est_hold_days": 28
+ }
 }
