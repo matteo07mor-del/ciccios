@@ -55,6 +55,17 @@
   .vals { display:grid; grid-template-columns:repeat(2,1fr); gap:2px 14px; margin-top:8px;
           font-size:12.5px; color:var(--mute); }
   .vals b { color:var(--text); font-weight:600; }
+  .tabs { display:flex; gap:6px; margin:14px 0 0; }
+  .tabs button { flex:1; background:var(--card); color:var(--mute); border:1px solid var(--track);
+                 border-radius:8px; padding:8px 6px; font:inherit; font-size:14px; font-weight:600; cursor:pointer; }
+  .tabs button.on { color:var(--text); border-color:var(--line); }
+  .tabs button[data-f="breakout"].on { border-color:#4c9be8; }
+  .tabs button[data-f="rimbalzo"].on { border-color:#f0a63a; }
+  .chip { font-size:11px; padding:1px 7px; border-radius:6px; margin-left:6px; vertical-align:middle; font-weight:600; }
+  .chip.breakout { background:rgba(76,155,232,.18); color:#4c9be8; }
+  .chip.rimbalzo { background:rgba(240,166,58,.18); color:#f0a63a; }
+  .why { font-size:12px; color:var(--mute); margin-top:2px; }
+  .rule { font-size:12.5px; color:var(--text); margin-top:3px; }
   .tag { font-size:11px; padding:1px 6px; border-radius:6px; background:var(--track); color:var(--mute);
          margin-left:6px; vertical-align:middle; }
 </style>
@@ -64,12 +75,21 @@
   <h1>Segnali Nasdaq</h1>
   <div class="sub" id="upd">Caricamento...</div>
 
+  <div class="tabs" id="tabs">
+    <button type="button" data-f="all" class="on">Tutte</button>
+    <button type="button" data-f="breakout">Breakout</button>
+    <button type="button" data-f="rimbalzo">Rimbalzo</button>
+  </div>
+  <div class="sub" id="stratinfo" style="margin-top:8px"></div>
+
   <div class="stats">
     <div class="card"><div class="lbl">Risultato netto</div><div class="big" id="s-net">-</div></div>
     <div class="card"><div class="lbl">Operazioni chiuse</div><div class="big" id="s-n">-</div></div>
     <div class="card"><div class="lbl">Segnali vincenti</div><div class="big" id="s-win">-</div></div>
     <div class="card"><div class="lbl">Tasse pagate</div><div class="big" id="s-tax">-</div></div>
   </div>
+
+  <div class="sub" id="avoided" style="margin-top:10px"></div>
 
   <h2>Performance cumulata (netto tasse e costi)</h2>
   <div class="card"><canvas id="chart"></canvas></div>
@@ -84,11 +104,16 @@
   <h2>Da comprare domani</h2>
   <div class="card" id="pending"></div>
 
+  <div id="cancwrap" style="display:none">
+    <h2>Annullati all'apertura</h2>
+    <div class="card" id="cancelled"></div>
+  </div>
+
   <h2>Storico</h2>
   <div class="card" id="closed"></div>
 
   <p class="warn">Strumento statistico, non consulenza finanziaria. I segnali non garantiscono profitti
-  e la performance passata non anticipa quella futura. Importi stimati per una posizione
+  e la performance passata non anticipa quella futura. Breakout e rimbalzo sono strategie separate e i loro risultati sono contabilizzati a parte. Importi stimati per una posizione
   fissa, con tasse 26%, cambio, commissioni e (se CFD o leva) interessi notturni eToro; il
   cambio EUR/USD non è incluso. I prezzi live arrivano da Yahoo Finance e possono avere
   qualche minuto di ritardo.</p>
@@ -101,7 +126,19 @@ const cls = v => v>=0 ? 'up' : 'down';
 const $ = id => document.getElementById(id);
 const DEF = { position_eur:1000, fx_fee_per_side:0.005, tax_rate:0.26, leverage:1, cfd:false,
   commission_per_side_eur:0.9, cfd_spread_pct:0.0015, cfd_markup_pct:6.4, cfd_benchmark_pct:4.0,
-  ivafe_rate:0.002, est_hold_days:28 };
+  ivafe_rate:0.002, est_hold_days:{breakout:28, rimbalzo:7}, max_hold_days:{breakout:20, rimbalzo:5} };
+const STRAT = {
+  breakout:{ label:'Breakout', info:'Rottura del massimo a 20 giorni con filtri anti falso breakout. Orizzonte fino a ~4 settimane.' },
+  rimbalzo:{ label:'Rimbalzo', info:'RSI basso che risale + incrocio MACD + conferme (Bollinger, stocastico). Orizzonte massimo 1 settimana.' } };
+const stratOf = s => s.strategy || 'breakout';
+let FILTER = 'all';
+try { FILTER = localStorage.getItem('segnali-filter') || 'all'; } catch (e) {}
+const sel = arr => FILTER === 'all' ? arr : arr.filter(s => stratOf(s) === FILTER);
+const chip = s => '<span class="chip ' + stratOf(s) + '">' + STRAT[stratOf(s)].label + '</span>';
+const estDays = s => { const e = CFG.est_hold_days; return typeof e === 'object' ? (e[stratOf(s)] ?? 28) : (e || 28); };
+const maxHold = s => { const m = CFG.max_hold_days; return typeof m === 'object' ? m[stratOf(s)] : (m || null); };
+const CANCEL = s => s.cancel_reason === 'gap_alto' ? 'gap troppo alto, non inseguire'
+  : (stratOf(s) === 'breakout' ? 'falso breakout evitato' : 'rimbalzo non confermato');
 let CFG = DEF, DATA = null, LIVE = {};   // LIVE[sym] = {p, t, via}
 
 // stessa formula dello scanner (scanner.py -> net_result); days = giorni di calendario
@@ -227,9 +264,16 @@ async function refreshLive() {
 }
 
 /* ---------------- rendering ---------------- */
+function chartPoints() {
+  let cum = 0;
+  return sel(DATA.closed).sort((a,b) => a.exit_date.localeCompare(b.exit_date))
+    .map(x => ({ d:x.exit_date, r:x.result_net, v:(cum += x.result_net) }));
+}
+
 function render(d) {
   DATA = d; CFG = Object.assign({}, DEF, d.config || {});
-  const closed = [...d.closed].sort((a,b) => a.exit_date.localeCompare(b.exit_date));
+  const closed = sel(d.closed).sort((a,b) => a.exit_date.localeCompare(b.exit_date));
+  const open = sel(d.open), pending = sel(d.pending), cancelled = sel(d.cancelled || []);
   const net = closed.reduce((s,x) => s + x.result_net, 0);
   const wins = closed.filter(x => x.result_net > 0).length;
   const tax = closed.reduce((s,x) => s + (x.tax||0), 0);
@@ -238,16 +282,21 @@ function render(d) {
   $('s-win').textContent = closed.length ? Math.round(100*wins/closed.length) + '%' : '-';
   $('s-tax').textContent = tax.toFixed(0) + ' €';
   $('upd').textContent = d.updated ? 'Ultima scansione: ' + new Date(d.updated).toLocaleString('it-IT') : 'Nessuna scansione ancora eseguita';
+  $('stratinfo').textContent = FILTER === 'all' ? 'Due strategie indipendenti: breakout (settimane) e rimbalzo (max 1 settimana).' : STRAT[FILTER].info;
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.f === FILTER));
 
-  let cum = 0;
-  drawChart(closed.map(x => ({ d:x.exit_date, r:x.result_net, v:(cum += x.result_net) })));
+  const nb = cancelled.filter(s => stratOf(s) === 'breakout' && s.cancel_reason === 'sotto_livello').length;
+  $('avoided').textContent = nb ? 'Falsi breakout evitati dal controllo all\'apertura: ' + nb : '';
 
-  listRows($('open'), d.open, s => {
+  drawChart(chartPoints());
+
+  listRows($('open'), open, s => {
     const enPct = Math.max(0, Math.min(100, (s.entry - s.stop)/(s.target - s.stop)*100));
+    const mh = maxHold(s);
     return `<div class="pos" data-sym="${s.symbol}">
       <div class="head">
-        <div><span class="tick">${s.symbol}</span><span class="tag">...</span>
-          <div class="small">Acquisto del ${s.entry_date} a ${usd(s.entry)}</div></div>
+        <div><span class="tick">${s.symbol}</span>${chip(s)}<span class="tag">...</span>
+          <div class="small">Acquisto del ${s.entry_date} a ${usd(s.entry)}${mh ? ' · giorno ' + (s.bars_held || 1) + ' di ' + mh : ''}</div></div>
         <div class="right"><div class="price">-</div>
           <div class="pc small">-</div></div>
       </div>
@@ -256,39 +305,52 @@ function render(d) {
       <div class="scale"><span>Stop ${usd(s.stop)}</span><span>Obiettivo ${usd(s.target)}</span></div>
       <div class="vals">
         <div>Ingresso <b>${usd(s.entry)}</b></div>
-        <div>Se obiettivo <b class="up">${eur(netEst(s.entry, s.target, CFG.est_hold_days))}</b></div>
+        <div>Se obiettivo <b class="up">${eur(netEst(s.entry, s.target, estDays(s)))}</b></div>
         <div>ATR (volatilità) <b>${s.atr}</b></div>
-        <div>Se stop <b class="down">${eur(netEst(s.entry, s.stop, CFG.est_hold_days))}</b></div>
+        <div>Se stop <b class="down">${eur(netEst(s.entry, s.stop, estDays(s)))}</b></div>
         <div>RSI al segnale <b>${s.rsi}</b></div>
         <div>Costi <b>${CFG.cfd || CFG.leverage > 1 ? 'CFD: interessi notturni' : 'azioni reali: no interessi'}</b></div>
       </div>
       <div class="small qt" style="margin-top:6px"></div>
     </div>`;
   }, 'Nessuna operazione aperta.');
-  d.open.forEach(fillPosition);
+  open.forEach(fillPosition);
 
-  listRows($('pending'), d.pending, s => `
-    <div class="row"><div><div class="tick">${s.symbol}</div>
+  listRows($('pending'), pending, s => `
+    <div class="row"><div><div class="tick">${s.symbol}${chip(s)}</div>
       <div class="small">Rif. ${s.ref_price} $ · RSI ${s.rsi} · volumi x${s.vol_ratio}</div>
+      ${s.entry_min ? `<div class="rule">Compra solo se apre tra ${s.entry_min} e ${s.entry_max} $</div>` : ''}
       <div class="small">Obiettivo ${s.target} $ · Stop ${s.stop} $</div>
+      ${(s.why || []).length ? `<div class="why">${s.why.join(' · ')}</div>` : ''}
       <div class="small pend" data-sym="${s.symbol}"></div></div>
       <div class="right"><div class="${cls(s.est_profit_net)}">${eur(s.est_profit_net)}</div>
       <div class="small">stima netta</div></div></div>`, 'Nessun nuovo segnale.');
 
+  $('cancwrap').style.display = cancelled.length ? '' : 'none';
+  listRows($('cancelled'), [...cancelled].reverse().slice(0, 10), s => `
+    <div class="row"><div><div class="tick">${s.symbol}${chip(s)}</div>
+      <div class="small">${s.cancel_date} · ${CANCEL(s)}</div></div>
+      <div class="right small">aperto a ${s.open} $<br>livello ${s.entry_min} $</div></div>`, '');
+
   listRows($('closed'), [...closed].reverse(), s => `
-    <div class="row"><div><div class="tick">${s.symbol}</div>
+    <div class="row"><div><div class="tick">${s.symbol}${chip(s)}</div>
       <div class="small">${s.entry_date} → ${s.exit_date} · ${s.reason}</div>
       <div class="small">${s.entry} $ → ${s.exit} $</div></div>
       <div class="right"><div class="${cls(s.result_net)}">${eur(s.result_net)}</div>
       <div class="small">netto</div></div></div>`, 'Ancora nessuna operazione chiusa.');
-  Object.keys(LIVE).length && d.pending.forEach(fillPending);
+  Object.keys(LIVE).length && pending.forEach(fillPending);
 }
 
-fetch('data.json?' + Date.now()).then(r => r.json()).catch(() => ({pending:[],open:[],closed:[],updated:null}))
+fetch('data.json?' + Date.now()).then(r => r.json()).catch(() => ({pending:[],open:[],closed:[],cancelled:[],updated:null}))
   .then(d => { render(d); refreshLive(); });
-window.addEventListener('resize', () => DATA && drawChart((() => { let c = 0;
-  return [...DATA.closed].sort((a,b) => a.exit_date.localeCompare(b.exit_date)).map(x => ({d:x.exit_date, r:x.result_net, v:(c += x.result_net)})); })()));
+window.addEventListener('resize', () => DATA && drawChart(chartPoints()));
 $('refresh').addEventListener('click', refreshLive);
+$('tabs').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b || !DATA) return;
+  FILTER = b.dataset.f;
+  try { localStorage.setItem('segnali-filter', FILTER); } catch (err) {}
+  render(DATA);
+});
 setInterval(() => { if (document.visibilityState === 'visible') refreshLive(); }, 30000);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refreshLive(); });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
