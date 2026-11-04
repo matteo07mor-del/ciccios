@@ -1,6 +1,30 @@
 {
- "updated": "2026-11-03T22:15:44+00:00",
- "pending": [],
+ "updated": "2026-11-04T21:46:02+00:00",
+ "pending": [
+  {
+   "strategy": "breakout",
+   "symbol": "CDW",
+   "signal_date": "2026-11-04",
+   "ref_price": 168.75,
+   "atr": 7.7679,
+   "target": 199.82,
+   "stop": 153.21,
+   "est_profit_net": 126.71,
+   "est_loss_net": -103.54,
+   "rsi": 63.8,
+   "vol_ratio": 2.11,
+   "level": 166.15,
+   "entry_min": 165.37,
+   "entry_max": 176.52,
+   "score": 8.31,
+   "why": [
+    "chiusura 168.75 sopra il massimo a 20 gg (166.15)",
+    "volumi x2.1",
+    "chiusura a 79% della candela",
+    "meglio di QQQ di +28.3% (60 gg)"
+   ]
+  }
+ ],
  "open": [
   {
    "symbol": "VRTX",
@@ -16,7 +40,8 @@
    "score": 6.16,
    "entry_date": "2026-11-02",
    "entry": 559.93,
-   "last_price": 530.76
+   "last_price": 549.04,
+   "bars_held": 3
   },
   {
    "symbol": "MDLZ",
@@ -32,7 +57,8 @@
    "score": 6.0,
    "entry_date": "2026-11-02",
    "entry": 65.3,
-   "last_price": 65.12
+   "last_price": 67.38,
+   "bars_held": 3
   },
   {
    "symbol": "CCEP",
@@ -48,7 +74,8 @@
    "score": 5.34,
    "entry_date": "2026-11-02",
    "entry": 114.44,
-   "last_price": 111.56
+   "last_price": 115.84,
+   "bars_held": 3
   },
   {
    "symbol": "PYPL",
@@ -64,10 +91,12 @@
    "score": 5.18,
    "entry_date": "2026-11-03",
    "entry": 58.78,
-   "last_price": 58.21
+   "last_price": 60.2,
+   "bars_held": 2
   }
  ],
  "closed": [],
+ "cancelled": [],
  "config": {
   "position_eur": 1000,
   "fx_fee_per_side": 0.005,
@@ -79,6 +108,13 @@
   "cfd_markup_pct": 6.4,
   "cfd_benchmark_pct": 4.0,
   "ivafe_rate": 0.002,
-  "est_hold_days": 28
+  "est_hold_days": {
+   "breakout": 28,
+   "rimbalzo": 7
+  },
+  "max_hold_days": {
+   "breakout": 20,
+   "rimbalzo": 5
+  }
  }
 }
