@@ -94,13 +94,15 @@ STRATEGY_DEFAULTS = {
         # --- RSI: basso e che torna a salire
         "rsi_oversold": 40, "rsi_lookback": 5, "rsi_max_now": 55,
         # --- MACD: linea MACD che taglia da sotto la linea segnale
-        "macd_cross_days": 1,       # 1 = incrocio avvenuto oggi; 2 = oggi o ieri
+        "macd_cross_days": 2,       # 1 = incrocio avvenuto oggi; 2 = oggi o ieri
         # --- spazio per salire e protezione dai "coltelli che cadono"
-        "min_room_atr": 0.5,        # il prezzo deve stare almeno 0,5 ATR sotto la media a 20 giorni (banda centrale)
-        "max_pullback_pct": 0.20,   # calo dal massimo a 20 giorni non oltre il 20%
+        "min_room_atr": 0.25,       # il prezzo deve stare almeno 0,25 ATR sotto la media a 20 giorni (banda centrale)
+        "max_pullback_pct": 0.25,   # calo dal massimo a 20 giorni non oltre il 25%
         # --- conferme aggiuntive (ne servono almeno min_confirmations su 5)
-        "stoch_oversold": 30, "bb_lookback": 3,
-        "min_confirmations": 3,
+        "stoch_oversold": 35, "bb_lookback": 5,
+        "bb_near_pct": 0.10,        # Bollinger: basta il minimo entro il 10% della larghezza delle bande dal bordo inferiore
+        "bb_no_new_low": True,      # Bollinger: oggi non deve fare un nuovo minimo rispetto a ieri (ha smesso di scendere)
+        "min_confirmations": 2,
         # --- conferma all'apertura del giorno dopo
         "entry_min_atr": 0.5,       # apre oltre 0,5 ATR sotto la chiusura -> rimbalzo fallito, annulla
         "entry_max_gap_atr": 1.0,   # apre oltre (chiusura + 1 ATR) -> rimbalzo gia' fatto, annulla
@@ -397,6 +399,13 @@ def analyze_rimbalzo(symbol, bars, cfg, bench):
     r, r_prev = r_s[-1], r_s[-2]
     r_low = min(r_s[-p["rsi_lookback"]:])
 
+    # filtri economici prima: evitano di calcolare MACD/stocastico sulla gran parte dei titoli
+    for name, ok in (("trend di fondo (sopra SMA200)", (not p["require_above_sma200"]) or c > s200),
+                     ("RSI ipervenduto", r_low <= p["rsi_oversold"]),
+                     ("RSI che risale", r > r_prev and r <= p["rsi_max_now"])):
+        if not ok:
+            return None, name
+
     # MACD: la linea MACD taglia la linea segnale DAL BASSO verso l'alto
     macd, msig = macd_series(closes)
     cross_idx = None
@@ -408,7 +417,7 @@ def analyze_rimbalzo(symbol, bars, cfg, bench):
     macd_ok = cross_idx is not None and macd[-1] > msig[-1]
 
     # spazio verso la media a 20 giorni e calo dal massimo recente
-    mid, _, lower_now = bollinger_at(closes, n - 1)
+    mid = bollinger_at(closes, n - 1)[0]
     high20 = max(b["h"] for b in bars[-20:])
     pullback = (high20 - c) / high20
 
@@ -426,10 +435,14 @@ def analyze_rimbalzo(symbol, bars, cfg, bench):
 
     # conferme aggiuntive
     conf = []
-    touched = any(bars[n - j]["l"] <= bollinger_at(closes, n - j)[2]
-                  for j in range(1, p["bb_lookback"] + 1))
-    if touched and c > lower_now:
-        conf.append("Bollinger: tocco della banda inferiore e rientro")
+    def near_lower(j):
+        _, up_j, low_j = bollinger_at(closes, n - j)
+        return bars[n - j]["l"] <= low_j + p["bb_near_pct"] * (up_j - low_j)
+    touched = any(near_lower(j) for j in range(1, p["bb_lookback"] + 1))
+    prev = bars[-2]
+    stopped_falling = (not p["bb_no_new_low"]) or last["l"] >= prev["l"]
+    if touched and c > prev["c"] and stopped_falling:
+        conf.append("Bollinger: vicino/sotto la banda inferiore, ha smesso di scendere e risale")
     k_s, d_s = stochastic(bars)
     st_cross = any(k_s[n - j] > d_s[n - j] and k_s[n - j - 1] <= d_s[n - j - 1]
                    for j in (1, 2))

@@ -25,7 +25,14 @@
     "target_atr": 2.0,
     "min_net_profit_eur": 15,
     "rsi_oversold": 40,
-    "macd_cross_days": 1,
-    "min_confirmations": 3
+    "rsi_max_now": 55,
+    "macd_cross_days": 2,
+    "min_confirmations": 2,
+    "min_room_atr": 0.25,
+    "max_pullback_pct": 0.25,
+    "stoch_oversold": 35,
+    "bb_lookback": 5,
+    "bb_near_pct": 0.10,
+    "bb_no_new_low": true
   }
 }

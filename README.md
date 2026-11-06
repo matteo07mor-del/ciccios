@@ -57,12 +57,12 @@ Cerca un ipervenduto che sta tornando a salire, dentro un trend di fondo rialzis
 Condizioni obbligatorie:
 - QQQ sopra la media a 200 giorni e titolo sopra la propria SMA200.
 - **RSI(14)** sceso a 40 o meno nelle ultime 5 sedute, oggi in risalita e non oltre 55.
-- **MACD(12,26,9)**: la linea MACD incrocia **dal basso verso l'alto** la linea segnale (oggi; con `macd_cross_days: 2` anche ieri).
-- Prezzo almeno 0,5 ATR sotto la media a 20 giorni (spazio per risalire) e calo dal massimo a 20 giorni non oltre il 20% (evita i "coltelli che cadono").
+- **MACD(12,26,9)**: la linea MACD incrocia **dal basso verso l'alto** la linea segnale (oggi o ieri; con `macd_cross_days: 1` solo oggi).
+- Prezzo almeno 0,25 ATR sotto la media a 20 giorni (spazio per risalire) e calo dal massimo a 20 giorni non oltre il 25% (evita i "coltelli che cadono").
 
-Conferme aggiuntive (ne servono almeno 3 su 5):
-1. **Bande di Bollinger (20, 2)**: tocco della banda inferiore nelle ultime 3 sedute e rientro.
-2. **Stocastico (14,3,3)**: incrocio rialzista %K su %D partendo da ipervenduto (<= 30).
+Conferme aggiuntive (ne servono almeno 2 su 5):
+1. **Bande di Bollinger (20, 2)**: nelle ultime 5 sedute il minimo ha toccato la banda inferiore o ne è stato vicino (entro il 10% della larghezza delle bande), e oggi ha smesso di scendere e sta risalendo (chiude sopra la chiusura di ieri, senza fare un nuovo minimo).
+2. **Stocastico (14,3,3)**: incrocio rialzista %K su %D partendo da ipervenduto (<= 35).
 3. **Candela di rimbalzo**: chiude verde e nella parte alta del range.
 4. **Volumi** pari o sopra la media.
 5. **MACD che incrocia sotto lo zero** (pullback profondo, non un semplice rallentamento).
@@ -75,6 +75,17 @@ Conferma all'apertura: se apre oltre 0,5 ATR sotto la chiusura il rimbalzo è fa
 Ogni valore non scritto usa il default in `scanner.py`. Si può disattivare una strategia con `"enabled": false`.
 Se una sera non arriva nessun segnale, il log (Actions -> Scansione Nasdaq) indica quali filtri hanno escluso più titoli,
 così sai quale soglia allentare.
+
+## Backtest (taratura sullo storico)
+`backtest.py` rifà girare le due strategie su 3 anni di storico Yahoo con le stesse funzioni dello scanner
+(conferma all'apertura, stop, obiettivo, scadenza, costi e tasse) e le confronta con ingressi casuali.
+
+    python backtest.py                              # breakout e rimbalzo con config.json
+    python backtest.py --strategy rimbalzo --grid   # prova varianti dei parametri del rimbalzo
+
+Fidati dei numeri solo con almeno ~30 operazioni, e solo se la variante va bene sia nella "1a parte"
+sia nella "2a parte" del periodo e batte la "base". Lo storico viene salvato in `backtest_cache.json`
+(non caricarlo su GitHub; usa `--refresh` per riscaricarlo).
 
 ## Note fiscali
 Conversione EUR/USD: 0,5% per lato (da verificare sul tuo conto). Con eToro sei in regime dichiarativo:
