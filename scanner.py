@@ -30,15 +30,25 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(BASE, "config.json")
 DATA_FILE = os.path.join(BASE, "docs", "data.json")
 
+# Componenti del Nasdaq-100 (da verificare ogni dicembre: l'indice cambia ogni anno)
 NASDAQ_100 = (
     "AAPL MSFT NVDA AMZN META GOOGL GOOG AVGO TSLA COST NFLX TMUS ASML CSCO AZN "
     "LIN PEP ADBE AMD TXN QCOM ISRG INTU AMGN BKNG AMAT HON CMCSA PDD ARM VRTX "
     "PANW ADP SBUX GILD MU ADI LRCX MELI INTC KLAC CRWD CEG REGN SNPS CDNS MDLZ "
     "PYPL MAR CTAS ORLY ABNB MRVL CSX FTNT WDAY DASH ADSK ROP NXPI PCAR CPRT "
-    "MNST AEP PAYX FANG CHTR KDP TTD ROST FAST ODFL KHC EA VRSK CTSH EXC LULU "
-    "GEHC DDOG XEL TEAM IDXX CCEP BKR ON ANSS CSGP MCHP CDW GFS ZS DXCM BIIB "
-    "TTWO MDB WBD ILMN"
+    "MNST AEP PAYX FANG CHTR KDP ROST FAST ODFL KHC EA VRSK CTSH EXC GEHC DDOG "
+    "XEL TEAM IDXX CCEP BKR CSGP MCHP ZS DXCM TTWO WBD SHOP TRI ALNY FER INSM "
+    "MPWR STX WDC"
 ).split()
+
+# Altri titoli Nasdaq liquidi (usciti dall'indice o mai entrati). Da verificare che siano disponibili su eToro.
+EXTRA = (
+    "MDB BIIB CDW GFS LULU ON TTD ILMN PLTR AXON MSTR APP COIN HOOD SMCI DKNG ZM "
+    "OKTA ALGN ULTA EXPE TSCO NTES BIDU JD"
+).split()
+
+# Tutti i titoli analizzati dallo scanner
+UNIVERSE = NASDAQ_100 + [t for t in EXTRA if t not in NASDAQ_100]
 
 STRATEGIES = ("breakout", "rimbalzo")
 LABELS = {"breakout": "BREAKOUT", "rimbalzo": "RIMBALZO"}
@@ -605,7 +615,7 @@ def run():
     state = load_state()
     print("Scarico dati...")
     data = {}
-    needed = set(NASDAQ_100) | {s["symbol"] for s in state["open"] + state["pending"]}
+    needed = set(UNIVERSE) | {s["symbol"] for s in state["open"] + state["pending"]}
     for sym in sorted(needed):
         data[sym] = fetch(sym)
         time.sleep(0.15)
@@ -649,7 +659,7 @@ def run():
             continue
         found, funnel = [], Counter()
         bench_closes = [b["c"] for b in bench] if bench else None
-        for sym in NASDAQ_100:
+        for sym in UNIVERSE:
             if sym in busy:
                 continue
             sig, failed = ANALYZERS[name](sym, data.get(sym), cfg, bench_closes)

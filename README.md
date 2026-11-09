@@ -1,6 +1,6 @@
 # Segnali Nasdaq
 
-Scanner sul Nasdaq-100 con **due strategie indipendenti**, notifiche su Android e Windows e dashboard
+Scanner sul Nasdaq-100 (più alcuni titoli Nasdaq liquidi, vedi `EXTRA` in `scanner.py`) con **due strategie indipendenti**, notifiche su Android e Windows e dashboard
 con il grafico delle performance. Costi eToro e tasse italiane (26%) sono inclusi.
 
 | Strategia | Orizzonte | Titolo notifica |
