@@ -1,5 +1,5 @@
 {
- "updated": "2026-11-13T22:53:26+00:00",
+ "updated": "2026-11-16T22:57:29+00:00",
  "pending": [],
  "open": [
   {
@@ -16,8 +16,8 @@
    "score": 6.16,
    "entry_date": "2026-11-02",
    "entry": 559.93,
-   "last_price": 538.6,
-   "bars_held": 10
+   "last_price": 537.79,
+   "bars_held": 11
   },
   {
    "symbol": "MDLZ",
@@ -34,7 +34,7 @@
    "entry_date": "2026-11-02",
    "entry": 65.3,
    "last_price": 67.54,
-   "bars_held": 10
+   "bars_held": 11
   },
   {
    "symbol": "CCEP",
@@ -50,8 +50,8 @@
    "score": 5.34,
    "entry_date": "2026-11-02",
    "entry": 114.44,
-   "last_price": 118.57,
-   "bars_held": 10
+   "last_price": 119.19,
+   "bars_held": 11
   },
   {
    "symbol": "PYPL",
@@ -67,8 +67,8 @@
    "score": 5.18,
    "entry_date": "2026-11-03",
    "entry": 58.78,
-   "last_price": 59.28,
-   "bars_held": 9
+   "last_price": 58.83,
+   "bars_held": 10
   }
  ],
  "closed": [
