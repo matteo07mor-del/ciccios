@@ -1,6 +1,6 @@
 # Segnali Nasdaq
 
-Scanner sul Nasdaq-100 (più alcuni titoli Nasdaq liquidi, vedi `EXTRA` in `scanner.py`) con **due strategie indipendenti**, notifiche su Android e Windows e dashboard
+Scanner su circa 270 titoli liquidi: il Nasdaq-100 più altri titoli di Nasdaq e NYSE (lista `EXTRA` in `scanner.py`) con **due strategie indipendenti**, notifiche su Android e Windows e dashboard
 con il grafico delle performance. Costi eToro e tasse italiane (26%) sono inclusi.
 
 | Strategia | Orizzonte | Titolo notifica |
@@ -49,6 +49,7 @@ Rimane la rottura del massimo a 20 giorni in un trend rialzista, ma con filtri c
 - **Poca resistenza sopra**: prezzo entro il 10% dal massimo annuale.
 - **Forza relativa**: il titolo deve battere QQQ negli ultimi 60 giorni.
 - **Conferma all'apertura**: se il giorno dopo apre sotto il livello rotto (-0,1 ATR) è un falso breakout e il segnale cade; se apre oltre +1 ATR dalla chiusura non lo si insegue.
+- **Uscita anticipata sul falso breakout**: nei primi 3 giorni di borsa, se una candela chiude sotto il livello rotto di oltre 0,3 ATR il breakout è fallito. Ricevi la notifica `ESCI DOMANI` la sera stessa e l'uscita viene registrata all'apertura del giorno dopo, senza aspettare lo stop. Si regola con `fail_exit_days` e `fail_exit_tol_atr` in `config.json` (`fail_exit_days: 0` la disattiva).
 - Obiettivo +4 ATR, stop -2 ATR, chiusura massima dopo 20 giorni di borsa.
 
 ## Strategia RIMBALZO
@@ -81,7 +82,8 @@ così sai quale soglia allentare.
 (conferma all'apertura, stop, obiettivo, scadenza, costi e tasse) e le confronta con ingressi casuali.
 
     python backtest.py                              # breakout e rimbalzo con config.json
-    python backtest.py --strategy rimbalzo --grid   # prova varianti dei parametri del rimbalzo
+    python backtest.py --strategy rimbalzo --grid   # prova varianti del rimbalzo (anche obiettivo a 2,5 e 3 ATR)
+    python backtest.py --strategy breakout --grid   # varianti del breakout (anche senza uscita anticipata)
 
 Fidati dei numeri solo con almeno ~30 operazioni, e solo se la variante va bene sia nella "1a parte"
 sia nella "2a parte" del periodo e batte la "base". Lo storico viene salvato in `backtest_cache.json`

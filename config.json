@@ -14,7 +14,9 @@
     "min_vol_ratio": 1.4,
     "max_extension_atr": 1.5,
     "min_close_position": 0.7,
-    "require_rel_strength": true
+    "require_rel_strength": true,
+    "fail_exit_days": 3,
+    "fail_exit_tol_atr": 0.3
   },
 
   "rimbalzo": {

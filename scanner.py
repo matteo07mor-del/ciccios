@@ -98,6 +98,9 @@ STRATEGY_DEFAULTS = {
         # --- conferma all'apertura del giorno dopo
         "entry_tol_atr": 0.1,       # apre sotto (livello - 0,1 ATR) -> falso breakout, si annulla
         "entry_max_gap_atr": 1.0,   # apre oltre (chiusura + 1 ATR) -> non inseguire, si annulla
+        # --- uscita anticipata sul falso breakout (dopo l'acquisto)
+        "fail_exit_days": 3,        # nei primi 3 giorni di borsa (0 = disattivata)...
+        "fail_exit_tol_atr": 0.3,   # ...se chiude sotto il livello rotto di oltre 0,3 ATR: esci all'apertura dopo
     },
     "rimbalzo": {
         "enabled": True,
@@ -533,23 +536,44 @@ def activate_pending(state, data, cfg):
     return cancelled
 
 
-def update_open(state, data, cfg):
-    """Chiude le operazioni che hanno toccato stop, target o scadenza."""
+def update_open(state, data, cfg, warn=None):
+    """Chiude le operazioni che hanno toccato stop, target o scadenza.
+
+    Breakout: se nei primi `fail_exit_days` giorni una candela chiude sotto il livello rotto
+    (di oltre `fail_exit_tol_atr` ATR) il breakout e' fallito: si esce all'apertura della
+    seduta successiva (reason 'falso_breakout'). Se quella seduta non c'e' ancora, l'operazione
+    resta aperta e il segnale viene aggiunto a `warn` (una sola volta) per avvisare di uscire.
+    """
     notes, still = [], []
     for sig in state["open"]:
-        max_hold = cfg[strat_of(sig)]["max_hold_days"]
+        p = cfg[strat_of(sig)]
+        max_hold = p["max_hold_days"]
+        fail_days = p.get("fail_exit_days", 0) if strat_of(sig) == "breakout" else 0
+        fail_level = (sig["level"] - p.get("fail_exit_tol_atr", 0) * sig["atr"]) if sig.get("level") else None
         bars = [b for b in (data.get(sig["symbol"]) or []) if b["d"] >= sig["entry_date"]]
-        exit_price = reason = exit_date = None
+        exit_price = reason = exit_date = exit_bar = None
+        failed_tonight = False
         for i, b in enumerate(bars):
             if b["o"] <= sig["stop"] or b["l"] <= sig["stop"]:
                 exit_price, reason = min(b["o"], sig["stop"]), "stop"
             elif b["o"] >= sig["target"] or b["h"] >= sig["target"]:
                 exit_price, reason = max(b["o"], sig["target"]), "target"
+            elif fail_days and fail_level is not None and i < fail_days and b["c"] < fail_level:
+                if i + 1 < len(bars):
+                    exit_bar = bars[i + 1]
+                    exit_price, reason = exit_bar["o"], "falso_breakout"
+                else:
+                    failed_tonight = True       # ha appena chiuso sotto il livello: si esce domani
+                    break
             elif i + 1 >= max_hold:
                 exit_price, reason = b["c"], "scadenza"
             if reason:
-                exit_date = b["d"]
+                exit_date = (exit_bar or b)["d"]
                 break
+        if failed_tonight and not sig.get("fail_alerted"):
+            sig["fail_alerted"] = True
+            if warn is not None:
+                warn.append((sig, bars[-1]["c"]))
         if reason:
             held = (datetime.strptime(exit_date, "%Y-%m-%d")
                     - datetime.strptime(sig["entry_date"], "%Y-%m-%d")).days
@@ -645,14 +669,26 @@ def run():
                f"(apertura {sig['open']} $). Non comprare.", "low", TAGS[strat_of(sig)])
 
     # 2) esiti delle operazioni aperte
-    for sig in update_open(state, data, cfg):
+    warn = []
+    for sig in update_open(state, data, cfg, warn):
         label = LABELS[strat_of(sig)]
+        if sig["reason"] == "falso_breakout" and sig.get("fail_alerted"):
+            continue            # avvisato ieri sera: l'uscita e' gia' stata segnalata
         icon = {"target": "obiettivo raggiunto", "stop": "stop-loss colpito",
-                "scadenza": "tempo scaduto"}[sig["reason"]]
+                "scadenza": "tempo scaduto",
+                "falso_breakout": "falso breakout, uscita anticipata"}[sig["reason"]]
         notify(cfg, f"[{label}] CHIUDI {sig['symbol']} - {icon}",
                f"Esito stimato netto: {sig['result_net']:+.0f} EUR "
                f"(ingresso {sig['entry']} $, uscita ~{sig['exit']} $).",
                "high", TAGS[strat_of(sig)])
+
+    for sig, close_px in warn:
+        label = LABELS[strat_of(sig)]
+        print(f"[{label}] {sig['symbol']}: chiusura sotto il livello rotto, uscita domani")
+        notify(cfg, f"[{label}] ESCI DOMANI {sig['symbol']} - falso breakout",
+               f"Ha chiuso a {close_px:.2f} $, sotto il livello di breakout ({sig['level']} $). "
+               f"Il breakout e' fallito: chiudi la posizione domani all'apertura, senza aspettare lo stop "
+               f"({sig['stop']} $).", "high", TAGS[strat_of(sig)])
 
     # 3) nuovi segnali, strategia per strategia
     busy = {s["symbol"] for s in state["open"] + state["pending"]}
