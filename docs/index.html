@@ -165,6 +165,7 @@ const STRAT = {
   breakout:{ label:'Breakout', info:'Rottura del massimo a 20 giorni con filtri anti falso breakout. Orizzonte fino a ~4 settimane.' },
   rimbalzo:{ label:'Rimbalzo', info:'RSI basso che risale + incrocio MACD + conferme (Bollinger, stocastico). Orizzonte massimo 1 settimana.' } };
 const stratOf = s => s.strategy || 'breakout';
+const REASON = { target:'obiettivo raggiunto', stop:'stop-loss', scadenza:'tempo scaduto', falso_breakout:'falso breakout (uscita anticipata)' };
 let FILTER = 'all';
 try { FILTER = localStorage.getItem('segnali-filter') || 'all'; } catch (e) {}
 const sel = arr => FILTER === 'all' ? arr : arr.filter(s => stratOf(s) === FILTER);
@@ -384,6 +385,7 @@ function render(d) {
           <div class="pc small">-</div></div>
       </div>
       <div class="nt small"></div>
+      ${s.fail_alerted ? `<div class="small down" style="margin-top:4px">Ha chiuso sotto il livello di breakout: esci domani all'apertura</div>` : ''}
       <div class="bar"><span class="en" style="left:${enPct}%"></span><span class="mk" style="left:${enPct}%"></span></div>
       <div class="scale"><span>Stop ${usd(s.stop)}</span><span>Obiettivo ${usd(s.target)}</span></div>
       <div class="vals">
@@ -418,7 +420,7 @@ function render(d) {
 
   listRows($('closed'), [...closed].reverse(), s => `
     <div class="row"><div><div class="tick">${s.symbol}${chip(s)}</div>
-      <div class="small">${s.entry_date} → ${s.exit_date} · ${s.manual ? 'chiusa manualmente' : s.reason}</div>
+      <div class="small">${s.entry_date} → ${s.exit_date} · ${s.manual ? 'chiusa manualmente' : (REASON[s.reason] || s.reason)}</div>
       <div class="small">${s.entry} $ → ${s.exit} $</div>
       ${s.manual ? `<button type="button" class="linkbtn" data-act="restore" data-key="${keyOf(s)}">annulla chiusura manuale</button>` : ''}</div>
       <div class="right"><div class="${cls(s.result_net)}">${eur(s.result_net)}</div>
