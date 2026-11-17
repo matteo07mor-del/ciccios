@@ -66,6 +66,24 @@
   .chip.rimbalzo { background:rgba(240,166,58,.18); color:#f0a63a; }
   .why { font-size:12px; color:var(--mute); margin-top:2px; }
   .rule { font-size:12.5px; color:var(--text); margin-top:3px; }
+  .closebtn { margin-top:10px; width:100%; background:transparent; color:var(--text); border:1px solid var(--track);
+              border-radius:8px; padding:9px; font:inherit; font-size:14px; cursor:pointer; }
+  .closebtn:hover { border-color:var(--down); color:var(--down); }
+  .linkbtn { background:none; border:0; padding:0; margin-top:2px; color:var(--mute); font:inherit; font-size:12px;
+             text-decoration:underline; cursor:pointer; }
+  .modal { position:fixed; inset:0; background:rgba(0,0,0,.6); display:flex; align-items:center;
+           justify-content:center; padding:16px; z-index:10; }
+  .modal[hidden] { display:none; }
+  .dialog { background:var(--card); border-radius:14px; padding:18px; width:100%; max-width:380px; }
+  .dialog h3 { margin:0 0 8px; font-size:17px; }
+  .dialog input { width:100%; margin:4px 0 8px; padding:10px; font:inherit; font-size:16px; color:var(--text);
+                  background:var(--bg); border:1px solid var(--track); border-radius:8px; }
+  .dialog .note { font-size:12px; color:var(--mute); margin:10px 0 14px; }
+  .dialog .actions { display:flex; gap:8px; }
+  .dialog .actions button { flex:1; padding:10px; border-radius:8px; font:inherit; font-size:14px; font-weight:600; cursor:pointer;
+                            border:1px solid var(--track); background:var(--bg); color:var(--text); }
+  .dialog .actions button.danger { background:var(--down); border-color:var(--down); color:#fff; }
+  .dialog .actions button:disabled { opacity:.45; cursor:not-allowed; }
   .tag { font-size:11px; padding:1px 6px; border-radius:6px; background:var(--track); color:var(--mute);
          margin-left:6px; vertical-align:middle; }
 </style>
@@ -119,6 +137,22 @@
   qualche minuto di ritardo.</p>
 </main>
 
+<div class="modal" id="modal" hidden>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="m-title">
+    <h3 id="m-title">Vuoi chiudere questa operazione?</h3>
+    <div class="small" id="m-body"></div>
+    <label class="lbl" for="m-price" style="display:block;margin-top:12px">Prezzo di chiusura ($)</label>
+    <input id="m-price" type="number" step="0.01" min="0" inputmode="decimal">
+    <div id="m-net" class="small"></div>
+    <div class="note">Questo registra la chiusura solo in questa dashboard, su questo dispositivo: la posizione
+      va chiusa anche su eToro. Lo scanner non lo sa e potrebbe inviarti ancora la notifica di chiusura.</div>
+    <div class="actions">
+      <button type="button" data-act="cancel">Annulla</button>
+      <button type="button" class="danger" id="m-ok" data-act="confirm">Conferma chiusura</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const eur = v => (v>=0?'+':'') + v.toFixed(0) + ' €';
 const usd = v => v.toFixed(2) + ' $';
@@ -142,16 +176,64 @@ const CANCEL = s => s.cancel_reason === 'gap_alto' ? 'gap troppo alto, non inseg
 let CFG = DEF, DATA = null, LIVE = {};   // LIVE[sym] = {p, t, via}
 
 // stessa formula dello scanner (scanner.py -> net_result); days = giorni di calendario
-function netEst(entry, exit_, days) {
+function netDetail(entry, exit_, days) {
   const pos = CFG.position_eur, lev = CFG.leverage || 1, cfd = !!CFG.cfd || lev > 1;
   const exposure = pos*lev, ret = exit_/entry - 1, gross = exposure*ret;
   let costs = pos*CFG.fx_fee_per_side + Math.max(pos + gross, 0)*CFG.fx_fee_per_side;
   if (cfd) costs += exposure*CFG.cfd_spread_pct*2 + exposure*(CFG.cfd_markup_pct + CFG.cfd_benchmark_pct)/100/365*days;
   else     costs += CFG.commission_per_side_eur*2 + exposure*(1 + ret)*CFG.ivafe_rate*days/365;
-  const pre = gross - costs;
-  return pre - Math.max(pre, 0)*CFG.tax_rate;
+  const pre = gross - costs, tax = Math.max(pre, 0)*CFG.tax_rate;
+  return { net: pre - tax, tax, fees: costs };
 }
+const netEst = (entry, exit_, days) => netDetail(entry, exit_, days).net;
 const daysHeld = s => Math.max(0, Math.round((Date.now() - new Date(s.entry_date)) / 86400000));
+
+/* ---------------- chiusura manuale (salvata solo su questo dispositivo) ---------------- */
+const MKEY = 'segnali-manual';
+const keyOf = s => s.symbol + '|' + s.entry_date;
+function loadManual() { try { return JSON.parse(localStorage.getItem(MKEY) || '{}') || {}; } catch (e) { return {}; } }
+function saveManual(m) { try { localStorage.setItem(MKEY, JSON.stringify(m)); return true; } catch (e) { return false; } }
+// operazioni aperte/chiuse "come le vedi tu": le chiusure manuali sostituiscono quelle dello scanner
+function view(d) {
+  const man = loadManual(), keys = new Set(Object.keys(man));
+  return { open: d.open.filter(s => !keys.has(keyOf(s))),
+           closed: [...d.closed.filter(s => !keys.has(keyOf(s))), ...Object.values(man)] };
+}
+let CLOSING = null;
+const currentPrice = s => { const q = LIVE[s.symbol]; return q ? q.p : (s.last_price || s.entry); };
+const modalPrice = () => parseFloat(String($('m-price').value).replace(',', '.'));
+function updateModalNet() {
+  const px = modalPrice(), el = $('m-net');
+  if (!CLOSING || !(px > 0)) { el.textContent = 'Inserisci un prezzo valido'; el.className = 'small'; $('m-ok').disabled = true; return; }
+  const n = netDetail(CLOSING.entry, px, daysHeld(CLOSING)).net;
+  el.textContent = 'Risultato netto stimato: ' + eur(n) + ' (dopo tasse e costi)';
+  el.className = 'small ' + cls(n); $('m-ok').disabled = false;
+}
+function askClose(key) {
+  const s = DATA && DATA.open.find(x => keyOf(x) === key); if (!s) return;
+  CLOSING = s;
+  $('m-body').innerHTML = '<b>' + s.symbol + '</b>' + chip(s) + '<br>Acquisto del ' + s.entry_date + ' a ' + usd(s.entry);
+  $('m-price').value = currentPrice(s).toFixed(2);
+  updateModalNet();
+  $('modal').hidden = false;
+}
+function closeModal() { $('modal').hidden = true; CLOSING = null; }
+function doClose() {
+  const s = CLOSING, px = modalPrice(); if (!s || !(px > 0)) return;
+  const days = daysHeld(s), r = netDetail(s.entry, px, days), r2 = v => Math.round(v*100)/100;
+  const man = loadManual();
+  man[keyOf(s)] = Object.assign({}, s, {
+    exit_date: new Date(Date.now() - new Date().getTimezoneOffset()*60000).toISOString().slice(0,10),
+    exit: r2(px), reason:'manuale', manual:true,
+    result_net:r2(r.net), tax:r2(r.tax), fees:r2(r.fees), days_held:days });
+  if (!saveManual(man)) { alert('Non riesco a salvare la chiusura su questo dispositivo (memoria del browser bloccata).'); return; }
+  closeModal(); render(DATA);
+}
+function restoreManual(key) {
+  if (!confirm('Annullare la chiusura manuale? Se lo scanner segue ancora l\'operazione, tornerà tra quelle aperte.')) return;
+  const man = loadManual(); delete man[key]; saveManual(man);
+  render(DATA); refreshLive();
+}
 
 function listRows(el, items, render, emptyText) {
   el.innerHTML = items.length ? items.map(render).join('') : '<div class="empty">'+emptyText+'</div>';
@@ -248,14 +330,14 @@ function fillPending(s) {
 
 async function refreshLive() {
   if (!DATA) return;
-  const syms = [...new Set([...DATA.open, ...DATA.pending].map(s => s.symbol))];
+  const syms = [...new Set([...view(DATA).open, ...DATA.pending].map(s => s.symbol))];
   const st = $('livestatus');
   if (!syms.length) { st.innerHTML = '<span class="dot"></span>Nessuna posizione da seguire'; return; }
   st.innerHTML = '<span class="dot"></span>Aggiornamento prezzi...';
   const res = await Promise.all(syms.map(getQuote));
   let ok = 0;
   syms.forEach((sym, i) => { if (res[i]) { LIVE[sym] = res[i]; ok++; } });
-  DATA.open.forEach(fillPosition);
+  view(DATA).open.forEach(fillPosition);
   DATA.pending.forEach(fillPending);
   const hh = new Date().toLocaleTimeString('it-IT');
   if (ok === syms.length)      st.innerHTML = '<span class="dot on"></span>Prezzi live aggiornati alle ' + hh + ' (Yahoo Finance, ' + res[0].via + ')';
@@ -266,14 +348,15 @@ async function refreshLive() {
 /* ---------------- rendering ---------------- */
 function chartPoints() {
   let cum = 0;
-  return sel(DATA.closed).sort((a,b) => a.exit_date.localeCompare(b.exit_date))
+  return sel(view(DATA).closed).sort((a,b) => a.exit_date.localeCompare(b.exit_date))
     .map(x => ({ d:x.exit_date, r:x.result_net, v:(cum += x.result_net) }));
 }
 
 function render(d) {
   DATA = d; CFG = Object.assign({}, DEF, d.config || {});
-  const closed = sel(d.closed).sort((a,b) => a.exit_date.localeCompare(b.exit_date));
-  const open = sel(d.open), pending = sel(d.pending), cancelled = sel(d.cancelled || []);
+  const V = view(d);
+  const closed = sel(V.closed).sort((a,b) => a.exit_date.localeCompare(b.exit_date));
+  const open = sel(V.open), pending = sel(d.pending), cancelled = sel(d.cancelled || []);
   const net = closed.reduce((s,x) => s + x.result_net, 0);
   const wins = closed.filter(x => x.result_net > 0).length;
   const tax = closed.reduce((s,x) => s + (x.tax||0), 0);
@@ -312,6 +395,7 @@ function render(d) {
         <div>Costi <b>${CFG.cfd || CFG.leverage > 1 ? 'CFD: interessi notturni' : 'azioni reali: no interessi'}</b></div>
       </div>
       <div class="small qt" style="margin-top:6px"></div>
+      <button type="button" class="closebtn" data-act="close" data-key="${keyOf(s)}">Chiudi operazione</button>
     </div>`;
   }, 'Nessuna operazione aperta.');
   open.forEach(fillPosition);
@@ -334,8 +418,9 @@ function render(d) {
 
   listRows($('closed'), [...closed].reverse(), s => `
     <div class="row"><div><div class="tick">${s.symbol}${chip(s)}</div>
-      <div class="small">${s.entry_date} → ${s.exit_date} · ${s.reason}</div>
-      <div class="small">${s.entry} $ → ${s.exit} $</div></div>
+      <div class="small">${s.entry_date} → ${s.exit_date} · ${s.manual ? 'chiusa manualmente' : s.reason}</div>
+      <div class="small">${s.entry} $ → ${s.exit} $</div>
+      ${s.manual ? `<button type="button" class="linkbtn" data-act="restore" data-key="${keyOf(s)}">annulla chiusura manuale</button>` : ''}</div>
       <div class="right"><div class="${cls(s.result_net)}">${eur(s.result_net)}</div>
       <div class="small">netto</div></div></div>`, 'Ancora nessuna operazione chiusa.');
   Object.keys(LIVE).length && pending.forEach(fillPending);
@@ -345,6 +430,17 @@ fetch('data.json?' + Date.now()).then(r => r.json()).catch(() => ({pending:[],op
   .then(d => { render(d); refreshLive(); });
 window.addEventListener('resize', () => DATA && drawChart(chartPoints()));
 $('refresh').addEventListener('click', refreshLive);
+document.addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('[data-act]'); if (!b) return;
+  const a = b.dataset.act;
+  if (a === 'close') askClose(b.dataset.key);
+  else if (a === 'restore') restoreManual(b.dataset.key);
+  else if (a === 'cancel') closeModal();
+  else if (a === 'confirm') doClose();
+});
+$('modal').addEventListener('click', e => { if (e.target === $('modal')) closeModal(); });
+$('m-price').addEventListener('input', updateModalNet);
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('modal').hidden) closeModal(); });
 $('tabs').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b || !DATA) return;
   FILTER = b.dataset.f;
