@@ -41,10 +41,17 @@ NASDAQ_100 = (
     "MPWR STX WDC"
 ).split()
 
-# Altri titoli Nasdaq liquidi (usciti dall'indice o mai entrati). Da verificare che siano disponibili su eToro.
+# Altri titoli liquidi (Nasdaq e NYSE): usciti dall'indice o mai entrati. Da verificare che siano disponibili su eToro.
 EXTRA = (
     "MDB BIIB CDW GFS LULU ON TTD ILMN PLTR AXON MSTR APP COIN HOOD SMCI DKNG ZM "
-    "OKTA ALGN ULTA EXPE TSCO NTES BIDU JD"
+    "OKTA ALGN ULTA EXPE TSCO NTES BIDU JD JPM BAC WFC C GS MS BLK SCHW AXP V MA "
+    "COF USB PNC TFC SPGI MCO CME ICE AON MMC CB PGR TRV MET PRU AIG BRK-B UNH "
+    "JNJ LLY ABBV MRK PFE TMO ABT DHR BMY CVS CI ELV HCA MDT SYK BSX ZTS BDX EW "
+    "MCK WMT HD MCD NKE KO PG DIS LOW TGT TJX CMG YUM DG DLTR EL CL KMB GIS MO "
+    "PM KR HLT RCL CCL LVS CAT DE BA GE LMT RTX NOC GD UPS FDX UNP NSC MMM EMR "
+    "ETN ITW PH WM RSG XOM CVX COP EOG SLB OXY MPC PSX VLO KMI WMB OKE ORCL CRM "
+    "IBM NOW UBER ACN NET SNOW ANET DELL HPQ APH GLW TEL FICO TWLO MSI FSLR ENPH "
+    "T VZ NEE DUK SO D SRE SHW APD FCX NEM ECL NUE PLD AMT EQIX O SPG CCI F GM"
 ).split()
 
 # Tutti i titoli analizzati dallo scanner
