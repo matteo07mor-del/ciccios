@@ -7,91 +7,82 @@
 <link rel="manifest" href="manifest.json">
 <title>Segnali Nasdaq</title>
 <style>
-  :root { --bg:#0f1720; --card:#18222e; --text:#e6edf3; --mute:#8b9bab;
-          --up:#3fb68b; --down:#e5534b; --line:#4c9be8; --track:#243140; }
+  :root { --bg:#0b0e13; --card:#11161d; --text:#e8edf3; --mute:#7f8b99; --up:#34d399; --down:#f87171;
+          --line:#3cc4d6; --track:#222a35; --bo:#3cc4d6; --re:#f2a93b;
+          --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
   * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--text);
-         font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
-  main { max-width:760px; margin:0 auto; padding:16px; }
-  h1 { font-size:20px; margin:4px 0 2px; }
-  h2 { font-size:15px; margin:22px 0 8px; color:var(--mute); font-weight:600;
-       text-transform:uppercase; letter-spacing:.04em; }
-  .sub { color:var(--mute); font-size:13px; }
-  .stats { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-top:14px; }
-  @media (min-width:600px){ .stats{ grid-template-columns:repeat(4,1fr);} }
-  .card { background:var(--card); border-radius:12px; padding:12px 14px; }
-  .big { font-size:22px; font-weight:700; }
-  .lbl { color:var(--mute); font-size:12px; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  main { max-width:820px; margin:0 auto; padding:18px 16px 40px; }
+  .mast { display:flex; justify-content:space-between; align-items:flex-end; gap:12px; flex-wrap:wrap;
+          border-bottom:1px solid var(--track); padding-bottom:12px; }
+  h1 { font:700 13px/1 var(--mono); letter-spacing:.22em; text-transform:uppercase; margin:0 0 8px; color:var(--text); }
+  h2 { font:600 11px/1 var(--mono); margin:30px 0 10px; color:var(--mute); text-transform:uppercase; letter-spacing:.16em; }
+  .sub { color:var(--mute); font-size:12.5px; }
+  .mkt { font:600 11.5px var(--mono); padding:5px 9px; border:1px solid var(--track); border-radius:3px; }
+  .mkt.ok { color:var(--up); border-color:rgba(52,211,153,.4); } .mkt.ko { color:var(--down); border-color:rgba(248,113,113,.4); }
+  .tabs { display:flex; gap:22px; margin:16px 0 0; border-bottom:1px solid var(--track); }
+  .tabs button { background:none; border:0; border-bottom:2px solid transparent; color:var(--mute); padding:8px 0; margin-bottom:-1px;
+                 font:600 12px var(--mono); letter-spacing:.12em; text-transform:uppercase; cursor:pointer; }
+  .tabs button.on { color:var(--text); border-bottom-color:var(--text); }
+  .tabs button[data-f="breakout"].on { border-bottom-color:var(--bo); } .tabs button[data-f="rimbalzo"].on { border-bottom-color:var(--re); }
+  .stats { display:grid; grid-template-columns:repeat(2,1fr); gap:1px; margin-top:16px; background:var(--track); border:1px solid var(--track); }
+  @media (min-width:640px){ .stats{ grid-template-columns:repeat(3,1fr);} }
+  .stats .card { border-radius:0; padding:12px 14px; }
+  .card { background:var(--card); border:1px solid var(--track); border-radius:4px; padding:12px 14px; }
+  .stats .card { border:0; }
+  .big { font:700 22px/1.2 var(--mono); letter-spacing:-.02em; }
+  .lbl { color:var(--mute); font:11px var(--mono); text-transform:uppercase; letter-spacing:.1em; margin-bottom:3px; }
+  .ci { font:11px var(--mono); color:var(--mute); }
+  .verdict { margin-top:10px; font-size:13px; } .verdict b { font-family:var(--mono); }
   .up { color:var(--up); } .down { color:var(--down); }
   canvas { width:100%; height:220px; display:block; }
-  .row { display:flex; justify-content:space-between; gap:10px; padding:10px 0;
-         border-bottom:1px solid var(--track); }
+  .row { display:flex; justify-content:space-between; gap:10px; padding:10px 0; border-bottom:1px solid var(--track); font-variant-numeric:tabular-nums; }
   .row:last-child { border-bottom:0; }
-  .tick { font-weight:700; }
+  .tick { font:700 15px var(--mono); }
   .small { font-size:12.5px; color:var(--mute); }
-  .right { text-align:right; }
+  .right { text-align:right; font-variant-numeric:tabular-nums; }
   .empty { color:var(--mute); padding:8px 0; }
-  .warn { font-size:12px; color:var(--mute); margin:26px 0 10px; }
-
-  /* prezzi live */
-  .livebar { display:flex; align-items:center; justify-content:space-between; gap:10px;
-             margin:22px 0 8px; }
+  .warn { font-size:12px; color:var(--mute); margin:30px 0 10px; }
+  .livebar { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:30px 0 8px; }
   .livebar h2 { margin:0; }
-  .livebar button { background:var(--card); color:var(--text); border:1px solid var(--track);
-                    border-radius:8px; padding:6px 10px; font:inherit; font-size:13px; cursor:pointer; }
-  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--mute);
-         margin-right:6px; vertical-align:middle; }
+  .livebar button { background:none; color:var(--text); border:1px solid var(--track); border-radius:3px; padding:6px 10px; font:600 11px var(--mono); letter-spacing:.08em; text-transform:uppercase; cursor:pointer; }
+  .dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--mute); margin-right:6px; vertical-align:middle; }
   .dot.on { background:var(--up); } .dot.off { background:var(--down); }
-  .pos { padding:12px 0; border-bottom:1px solid var(--track); }
+  .pos { padding:14px 0; border-bottom:1px solid var(--track); }
   .pos:last-child { border-bottom:0; }
   .pos .head { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
-  .price { font-size:20px; font-weight:700; }
-  .bar { position:relative; height:8px; border-radius:4px; margin:14px 0 4px;
-         background:linear-gradient(90deg, rgba(229,83,75,.55), var(--track) 50%, rgba(63,182,139,.55)); }
-  .bar .mk { position:absolute; top:-4px; width:4px; height:16px; border-radius:2px; background:var(--text);
-             transform:translateX(-2px); transition:left .4s; }
-  .bar .en { position:absolute; top:-2px; width:2px; height:12px; background:var(--mute); transform:translateX(-1px); }
-  .scale { display:flex; justify-content:space-between; font-size:12px; color:var(--mute); }
-  .vals { display:grid; grid-template-columns:repeat(2,1fr); gap:2px 14px; margin-top:8px;
-          font-size:12.5px; color:var(--mute); }
-  .vals b { color:var(--text); font-weight:600; }
-  .tabs { display:flex; gap:6px; margin:14px 0 0; }
-  .tabs button { flex:1; background:var(--card); color:var(--mute); border:1px solid var(--track);
-                 border-radius:8px; padding:8px 6px; font:inherit; font-size:14px; font-weight:600; cursor:pointer; }
-  .tabs button.on { color:var(--text); border-color:var(--line); }
-  .tabs button[data-f="breakout"].on { border-color:#4c9be8; }
-  .tabs button[data-f="rimbalzo"].on { border-color:#f0a63a; }
-  .chip { font-size:11px; padding:1px 7px; border-radius:6px; margin-left:6px; vertical-align:middle; font-weight:600; }
-  .chip.breakout { background:rgba(76,155,232,.18); color:#4c9be8; }
-  .chip.rimbalzo { background:rgba(240,166,58,.18); color:#f0a63a; }
-  .why { font-size:12px; color:var(--mute); margin-top:2px; }
-  .rule { font-size:12.5px; color:var(--text); margin-top:3px; }
-  .closebtn { margin-top:10px; width:100%; background:transparent; color:var(--text); border:1px solid var(--track);
-              border-radius:8px; padding:9px; font:inherit; font-size:14px; cursor:pointer; }
+  .price { font:700 20px var(--mono); }
+  .bar { position:relative; height:6px; border-radius:1px; margin:16px 0 4px; background:linear-gradient(90deg, rgba(248,113,113,.6), var(--track) 50%, rgba(52,211,153,.6)); }
+  .bar .mk { position:absolute; top:-5px; width:3px; height:16px; background:var(--text); transform:translateX(-1px); transition:left .4s; }
+  .bar .en { position:absolute; top:-2px; width:1px; height:10px; background:var(--mute); }
+  .scale { display:flex; justify-content:space-between; font:11.5px var(--mono); color:var(--mute); }
+  .vals { display:grid; grid-template-columns:repeat(2,1fr); gap:2px 14px; margin-top:10px; font-size:12.5px; color:var(--mute); }
+  .vals b { color:var(--text); font-weight:600; font-family:var(--mono); }
+  .chip { font:700 10px var(--mono); letter-spacing:.1em; text-transform:uppercase; padding:2px 6px; border-radius:2px; margin-left:8px; vertical-align:middle; }
+  .chip.breakout { color:var(--bo); border:1px solid rgba(60,196,214,.5); } .chip.rimbalzo { color:var(--re); border:1px solid rgba(242,169,59,.5); }
+  .why { font-size:12px; color:var(--mute); margin-top:2px; } .rule { font-size:12.5px; margin-top:3px; }
+  .closebtn { margin-top:12px; width:100%; background:transparent; color:var(--text); border:1px solid var(--track); border-radius:3px; padding:9px; font:600 11.5px var(--mono); letter-spacing:.1em; text-transform:uppercase; cursor:pointer; }
   .closebtn:hover { border-color:var(--down); color:var(--down); }
-  .linkbtn { background:none; border:0; padding:0; margin-top:2px; color:var(--mute); font:inherit; font-size:12px;
-             text-decoration:underline; cursor:pointer; }
-  .modal { position:fixed; inset:0; background:rgba(0,0,0,.6); display:flex; align-items:center;
-           justify-content:center; padding:16px; z-index:10; }
+  .linkbtn { background:none; border:0; padding:0; margin-top:2px; color:var(--mute); font:inherit; font-size:12px; text-decoration:underline; cursor:pointer; }
+  .modal { position:fixed; inset:0; background:rgba(0,0,0,.65); display:flex; align-items:center; justify-content:center; padding:16px; z-index:10; }
   .modal[hidden] { display:none; }
-  .dialog { background:var(--card); border-radius:14px; padding:18px; width:100%; max-width:380px; }
-  .dialog h3 { margin:0 0 8px; font-size:17px; }
-  .dialog input { width:100%; margin:4px 0 8px; padding:10px; font:inherit; font-size:16px; color:var(--text);
-                  background:var(--bg); border:1px solid var(--track); border-radius:8px; }
+  .dialog { background:var(--card); border:1px solid var(--track); border-radius:4px; padding:18px; width:100%; max-width:380px; }
+  .dialog h3 { margin:0 0 8px; font:700 13px var(--mono); letter-spacing:.1em; text-transform:uppercase; }
+  .dialog input { width:100%; margin:4px 0 8px; padding:10px; font:16px var(--mono); color:var(--text); background:var(--bg); border:1px solid var(--track); border-radius:3px; }
   .dialog .note { font-size:12px; color:var(--mute); margin:10px 0 14px; }
   .dialog .actions { display:flex; gap:8px; }
-  .dialog .actions button { flex:1; padding:10px; border-radius:8px; font:inherit; font-size:14px; font-weight:600; cursor:pointer;
-                            border:1px solid var(--track); background:var(--bg); color:var(--text); }
-  .dialog .actions button.danger { background:var(--down); border-color:var(--down); color:#fff; }
+  .dialog .actions button { flex:1; padding:10px; border-radius:3px; font:600 12px var(--mono); letter-spacing:.06em; text-transform:uppercase; cursor:pointer; border:1px solid var(--track); background:var(--bg); color:var(--text); }
+  .dialog .actions button.danger { background:var(--down); border-color:var(--down); color:#0b0e13; }
   .dialog .actions button:disabled { opacity:.45; cursor:not-allowed; }
-  .tag { font-size:11px; padding:1px 6px; border-radius:6px; background:var(--track); color:var(--mute);
-         margin-left:6px; vertical-align:middle; }
+  .tag { font:11px var(--mono); padding:1px 6px; border-radius:2px; background:var(--track); color:var(--mute); margin-left:6px; vertical-align:middle; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Segnali Nasdaq</h1>
-  <div class="sub" id="upd">Caricamento...</div>
+  <header class="mast">
+    <div><h1>Segnali Nasdaq</h1><div class="sub" id="upd">Caricamento...</div></div>
+    <div class="mkt" id="mkt">mercato: -</div>
+  </header>
 
   <div class="tabs" id="tabs">
     <button type="button" data-f="all" class="on">Tutte</button>
@@ -103,9 +94,14 @@
   <div class="stats">
     <div class="card"><div class="lbl">Risultato netto</div><div class="big" id="s-net">-</div></div>
     <div class="card"><div class="lbl">Operazioni chiuse</div><div class="big" id="s-n">-</div></div>
-    <div class="card"><div class="lbl">Segnali vincenti</div><div class="big" id="s-win">-</div></div>
-    <div class="card"><div class="lbl">Tasse pagate</div><div class="big" id="s-tax">-</div></div>
+    <div class="card"><div class="lbl">Vittorie</div><div class="big" id="s-win">-</div><div class="ci" id="s-ci"></div></div>
+    <div class="card"><div class="lbl">Netto medio / op.</div><div class="big" id="s-avg">-</div></div>
+    <div class="card"><div class="lbl">Profit factor</div><div class="big" id="s-pf">-</div></div>
+    <div class="card"><div class="lbl">Max drawdown</div><div class="big" id="s-mdd">-</div></div>
   </div>
+  <div class="verdict" id="verdict"></div>
+  <div class="sub" style="margin-top:6px">Tasse pagate: <span id="s-tax">-</span></div>
+  <div class="sub" id="quality" style="margin-top:4px"></div>
 
   <div class="sub" id="avoided" style="margin-top:10px"></div>
 
@@ -365,6 +361,22 @@ function render(d) {
   $('s-n').textContent = closed.length;
   $('s-win').textContent = closed.length ? Math.round(100*wins/closed.length) + '%' : '-';
   $('s-tax').textContent = tax.toFixed(0) + ' €';
+  // statistiche (stesse formule dello scanner: Wilson per le vittorie, profit factor, drawdown)
+  const nets = closed.map(x => x.result_net), n = nets.length;
+  const gain = nets.filter(x => x > 0).reduce((a,b) => a + b, 0), lossT = -nets.filter(x => x <= 0).reduce((a,b) => a + b, 0);
+  let cumS = 0, peak = 0, mdd = 0; nets.forEach(x => { cumS += x; peak = Math.max(peak, cumS); mdd = Math.min(mdd, cumS - peak); });
+  const z = 1.96, ph = n ? wins/n : 0, dn = 1 + z*z/n, ctr = (ph + z*z/(2*n))/dn, hw = z*Math.sqrt(ph*(1-ph)/n + z*z/(4*n*n))/dn;
+  $('s-avg').textContent = n ? eur(net/n) : '-'; $('s-avg').className = 'big ' + (n ? cls(net/n) : '');
+  $('s-pf').textContent = n && lossT > 0 ? (gain/lossT).toFixed(2) : '-';
+  $('s-mdd').textContent = n ? eur(mdd) : '-';
+  $('s-ci').textContent = n ? 'intervallo 95%: ' + Math.round(100*Math.max(0,ctr-hw)) + '-' + Math.round(100*Math.min(1,ctr+hw)) + '%' : '';
+  const sv = (d.stats || {})[FILTER];
+  $('verdict').innerHTML = sv && sv.n ? 'Verdetto statistico: <b>' + sv.verdict + '</b>' + (sv.be_win ? ' · per il pareggio serve vincere il ' + Math.round(sv.be_win) + '% delle volte' : '') : '';
+  const mk = d.market;
+  $('mkt').textContent = mk ? (mk.ok ? 'QQQ sopra la media 200 gg' : 'QQQ sotto la media 200 gg: niente nuovi segnali') : 'mercato: -';
+  $('mkt').className = 'mkt ' + (mk ? (mk.ok ? 'ok' : 'ko') : '');
+  const ql = d.quality || [];
+  $('quality').textContent = ql.length ? 'Dati scartati dai controlli di qualità (' + ql.length + '): ' + ql.slice(0,4).map(q => q.symbol + ' (' + q.reason + ')').join(', ') + (ql.length > 4 ? '...' : '') : '';
   $('upd').textContent = d.updated ? 'Ultima scansione: ' + new Date(d.updated).toLocaleString('it-IT') : 'Nessuna scansione ancora eseguita';
   $('stratinfo').textContent = FILTER === 'all' ? 'Due strategie indipendenti: breakout (settimane) e rimbalzo (max 1 settimana).' : STRAT[FILTER].info;
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.f === FILTER));
