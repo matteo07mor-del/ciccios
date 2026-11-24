@@ -26,6 +26,8 @@ import urllib.request
 from collections import Counter
 from datetime import datetime, timezone
 
+import tradestats
+
 BASE = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(BASE, "config.json")
 DATA_FILE = os.path.join(BASE, "docs", "data.json")
@@ -640,6 +642,22 @@ def fmt_signal(sig, cfg):
             f"{risk}\n{horizon}\n{_costs_line(cfg, p)}")
 
 
+# ---------------------------------------------------------------- qualita' dei dati
+def validate_bars(bars, last_date):
+    """Controlli di qualita' sui dati scaricati. Ritorna il motivo dello scarto o None."""
+    if not bars or len(bars) < 210:
+        return "storico insufficiente"
+    if (datetime.strptime(last_date, "%Y-%m-%d") - datetime.strptime(bars[-1]["d"], "%Y-%m-%d")).days > 5:
+        return "dati non aggiornati"
+    if min(b["l"] for b in bars) <= 0 or any(b["h"] < b["l"] for b in bars):
+        return "prezzi incoerenti"
+    if sum(b["v"] for b in bars[-20:]) == 0:
+        return "volumi nulli"
+    if any(abs(bars[i]["c"] / bars[i - 1]["c"] - 1) > 0.35 for i in range(1, len(bars))):
+        return "salto anomalo (split o errore)"
+    return None
+
+
 # ---------------------------------------------------------------- main
 def run():
     cfg = load_config()
@@ -654,6 +672,15 @@ def run():
         print("Dati insufficienti (rete?). Esco senza modificare nulla.")
         return 1
     bench = fetch("QQQ")
+    last_date = bench[-1]["d"] if bench else datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    quality = []
+    for sym in UNIVERSE:
+        why = validate_bars(data.get(sym), last_date) if data.get(sym) else "download non riuscito"
+        if why:
+            quality.append({"symbol": sym, "reason": why})
+            data[sym] = None        # scartato: non genera segnali ne' tracciamento con dati dubbi
+    if quality:
+        print(f"Dati scartati ({len(quality)}): " + ", ".join(f"{q['symbol']} ({q['reason']})" for q in quality[:12]))
 
     # 1) conferma all'apertura dei segnali di ieri
     for sig in activate_pending(state, data, cfg):
@@ -720,6 +747,15 @@ def run():
         if not found:
             top = ", ".join(f"{k} ({v})" for k, v in funnel.most_common(3))
             print(f"[{LABELS[name]}] Nessun segnale. Filtri piu' selettivi: {top}")
+
+    state["quality"] = quality
+    if bench:
+        closes = [b["c"] for b in bench]
+        state["market"] = {"date": bench[-1]["d"], "close": round(closes[-1], 2),
+                           "sma200": round(sma(closes, 200), 2), "ok": uptrend}
+    state["stats"] = {n: tradestats.summarize([t for t in state["closed"] if strat_of(t) == n])
+                      for n in STRATEGIES}
+    state["stats"]["all"] = tradestats.summarize(state["closed"])
 
     # parametri usati dalla dashboard per il profitto netto "se chiudi ora"
     state["config"] = {k: cfg[k] for k in (

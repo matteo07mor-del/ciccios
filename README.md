@@ -77,6 +77,13 @@ Ogni valore non scritto usa il default in `scanner.py`. Si può disattivare una 
 Se una sera non arriva nessun segnale, il log (Actions -> Scansione Nasdaq) indica quali filtri hanno escluso più titoli,
 così sai quale soglia allentare.
 
+## Statistiche e controlli sui dati
+- **Statistiche** (`tradestats.py`): per ogni strategia la dashboard mostra vittorie con intervallo di confidenza al 95%,
+  netto medio per operazione, profit factor, drawdown massimo e la percentuale di vittorie necessaria per il pareggio dopo costi e tasse.
+  Il **verdetto** dice se il risultato è distinguibile dal caso: con meno di 30 operazioni chiuse è sempre "campione troppo piccolo".
+- **Qualità dei dati**: prima di analizzare, lo scanner scarta i titoli con dati non aggiornati, prezzi incoerenti, volumi nulli
+  o salti anomali (>35% in un giorno, tipici di split mal gestiti). Il motivo compare nel log e nella dashboard.
+
 ## Backtest (taratura sullo storico)
 `backtest.py` rifà girare le due strategie su 3 anni di storico Yahoo con le stesse funzioni dello scanner
 (conferma all'apertura, stop, obiettivo, scadenza, costi e tasse) e le confronta con ingressi casuali.
