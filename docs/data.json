@@ -1,5 +1,5 @@
 {
- "updated": "2026-11-23T23:03:55+00:00",
+ "updated": "2026-11-24T11:04:57+00:00",
  "pending": [],
  "open": [
   {
@@ -140,6 +140,74 @@
   "max_hold_days": {
    "breakout": 20,
    "rimbalzo": 5
+  }
+ },
+ "quality": [
+  {
+   "symbol": "EA",
+   "reason": "storico insufficiente"
+  },
+  {
+   "symbol": "TEAM",
+   "reason": "salto anomalo (split o errore)"
+  },
+  {
+   "symbol": "WBD",
+   "reason": "storico insufficiente"
+  },
+  {
+   "symbol": "MMC",
+   "reason": "download non riuscito"
+  },
+  {
+   "symbol": "SNOW",
+   "reason": "salto anomalo (split o errore)"
+  },
+  {
+   "symbol": "ENPH",
+   "reason": "salto anomalo (split o errore)"
+  }
+ ],
+ "market": {
+  "date": "2026-11-23",
+  "close": 651.03,
+  "sma200": 683.27,
+  "ok": false
+ },
+ "stats": {
+  "breakout": {
+   "n": 3,
+   "verdict": "campione troppo piccolo",
+   "win": 0.0,
+   "win_lo": 0.0,
+   "win_hi": 56.2,
+   "avg": -92.02,
+   "avg_lo": -102.34,
+   "avg_hi": -72.29,
+   "pf": 0.0,
+   "mdd": -276.06,
+   "avg_win": 0.0,
+   "avg_loss": -92.02,
+   "be_win": null
+  },
+  "rimbalzo": {
+   "n": 0,
+   "verdict": "nessun dato"
+  },
+  "all": {
+   "n": 3,
+   "verdict": "campione troppo piccolo",
+   "win": 0.0,
+   "win_lo": 0.0,
+   "win_hi": 56.2,
+   "avg": -92.02,
+   "avg_lo": -102.34,
+   "avg_hi": -72.29,
+   "pf": 0.0,
+   "mdd": -276.06,
+   "avg_win": 0.0,
+   "avg_loss": -92.02,
+   "be_win": null
   }
  }
 }
