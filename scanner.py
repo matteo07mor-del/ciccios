@@ -538,13 +538,16 @@ def activate_pending(state, data, cfg):
     return cancelled
 
 
-def update_open(state, data, cfg, warn=None):
+def update_open(state, data, cfg, warn=None, intraday=False):
     """Chiude le operazioni che hanno toccato stop, target o scadenza.
 
     Breakout: se nei primi `fail_exit_days` giorni una candela chiude sotto il livello rotto
     (di oltre `fail_exit_tol_atr` ATR) il breakout e' fallito: si esce all'apertura della
     seduta successiva (reason 'falso_breakout'). Se quella seduta non c'e' ancora, l'operazione
     resta aperta e il segnale viene aggiunto a `warn` (una sola volta) per avvisare di uscire.
+
+    intraday=True: l'ultima candela e' ancora in formazione, quindi si controllano solo stop e
+    obiettivo (minimo e massimo toccati finora); scadenza e falso breakout aspettano la chiusura.
     """
     notes, still = [], []
     for sig in state["open"]:
@@ -560,14 +563,14 @@ def update_open(state, data, cfg, warn=None):
                 exit_price, reason = min(b["o"], sig["stop"]), "stop"
             elif b["o"] >= sig["target"] or b["h"] >= sig["target"]:
                 exit_price, reason = max(b["o"], sig["target"]), "target"
-            elif fail_days and fail_level is not None and i < fail_days and b["c"] < fail_level:
+            elif (not intraday) and fail_days and fail_level is not None and i < fail_days and b["c"] < fail_level:
                 if i + 1 < len(bars):
                     exit_bar = bars[i + 1]
                     exit_price, reason = exit_bar["o"], "falso_breakout"
                 else:
                     failed_tonight = True       # ha appena chiuso sotto il livello: si esce domani
                     break
-            elif i + 1 >= max_hold:
+            elif (not intraday) and i + 1 >= max_hold:
                 exit_price, reason = b["c"], "scadenza"
             if reason:
                 exit_date = (exit_bar or b)["d"]
@@ -662,25 +665,34 @@ def validate_bars(bars, last_date):
 def run():
     cfg = load_config()
     state = load_state()
-    print("Scarico dati...")
+    # SCAN_MODE=monitor: controllo intraday leggero (solo operazioni aperte e in attesa).
+    # I nuovi segnali si cercano solo a mercato chiuso, su candele giornaliere complete.
+    monitor = os.environ.get("SCAN_MODE", "full").strip().lower() == "monitor"
+    before = json.dumps(state, sort_keys=True)
+    tracked = {s["symbol"] for s in state["open"] + state["pending"]}
+    if monitor and not tracked:
+        print("[controllo] nessuna operazione da seguire.")
+        return 0
+    print("Scarico dati..." if not monitor else f"Controllo intraday di {len(tracked)} titoli...")
     data = {}
-    needed = set(UNIVERSE) | {s["symbol"] for s in state["open"] + state["pending"]}
-    for sym in sorted(needed):
+    for sym in sorted(tracked if monitor else set(UNIVERSE) | tracked):
         data[sym] = fetch(sym)
         time.sleep(0.15)
-    if sum(1 for v in data.values() if v) < 10:
+    if sum(1 for v in data.values() if v) < (1 if monitor else 10):
         print("Dati insufficienti (rete?). Esco senza modificare nulla.")
         return 1
-    bench = fetch("QQQ")
-    last_date = bench[-1]["d"] if bench else datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    quality = []
-    for sym in UNIVERSE:
-        why = validate_bars(data.get(sym), last_date) if data.get(sym) else "download non riuscito"
-        if why:
-            quality.append({"symbol": sym, "reason": why})
-            data[sym] = None        # scartato: non genera segnali ne' tracciamento con dati dubbi
-    if quality:
-        print(f"Dati scartati ({len(quality)}): " + ", ".join(f"{q['symbol']} ({q['reason']})" for q in quality[:12]))
+    quality, bench = state.get("quality", []), None
+    if not monitor:
+        bench = fetch("QQQ")
+        last_date = bench[-1]["d"] if bench else datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        quality = []
+        for sym in UNIVERSE:
+            why = validate_bars(data.get(sym), last_date) if data.get(sym) else "download non riuscito"
+            if why:
+                quality.append({"symbol": sym, "reason": why})
+                data[sym] = None        # scartato: non genera segnali ne' tracciamento con dati dubbi
+        if quality:
+            print(f"Dati scartati ({len(quality)}): " + ", ".join(f"{q['symbol']} ({q['reason']})" for q in quality[:12]))
 
     # 1) conferma all'apertura dei segnali di ieri
     for sig in activate_pending(state, data, cfg):
@@ -697,7 +709,7 @@ def run():
 
     # 2) esiti delle operazioni aperte
     warn = []
-    for sig in update_open(state, data, cfg, warn):
+    for sig in update_open(state, data, cfg, warn, intraday=monitor):
         label = LABELS[strat_of(sig)]
         if sig["reason"] == "falso_breakout" and sig.get("fail_alerted"):
             continue            # avvisato ieri sera: l'uscita e' gia' stata segnalata
@@ -716,6 +728,17 @@ def run():
                f"Ha chiuso a {close_px:.2f} $, sotto il livello di breakout ({sig['level']} $). "
                f"Il breakout e' fallito: chiudi la posizione domani all'apertura, senza aspettare lo stop "
                f"({sig['stop']} $).", "high", TAGS[strat_of(sig)])
+
+    if monitor:
+        if json.dumps(state, sort_keys=True) != before:
+            state["stats"] = {n: tradestats.summarize([t for t in state["closed"] if strat_of(t) == n])
+                              for n in STRATEGIES}
+            state["stats"]["all"] = tradestats.summarize(state["closed"])
+            save_state(state)
+            print("Controllo intraday: stato aggiornato.")
+        else:
+            print("Controllo intraday: nessuna novita'.")
+        return 0
 
     # 3) nuovi segnali, strategia per strategia
     busy = {s["symbol"] for s in state["open"] + state["pending"]}
