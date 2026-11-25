@@ -5,6 +5,9 @@ on:
     # americana (chiude alle 21:00 UTC) sia con quella legale (chiude alle 20:00 UTC),
     # con un margine perche' Yahoo consolidi i prezzi di chiusura.
     - cron: "15 22 * * 1-5"
+    # Controllo intraday ogni 3 ore circa durante la seduta (solo operazioni aperte e in attesa:
+    # stop e obiettivo toccati, conferma dell'apertura). Non cerca nuovi segnali.
+    - cron: "45 14,17,20 * * 1-5"
   workflow_dispatch: {}
 
 permissions:
@@ -27,6 +30,7 @@ jobs:
         run: python scanner.py
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          SCAN_MODE: ${{ github.event.schedule == '45 14,17,20 * * 1-5' && 'monitor' || 'full' }}
       - name: Salva i dati
         run: |
           git config user.name "scanner"
