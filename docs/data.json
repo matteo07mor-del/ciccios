@@ -1,5 +1,5 @@
 {
- "updated": "2026-11-27T15:40:32+00:00",
+ "updated": "2026-11-27T18:32:08+00:00",
  "pending": [],
  "open": [
   {
@@ -16,7 +16,7 @@
    "score": 6.0,
    "entry_date": "2026-11-02",
    "entry": 65.3,
-   "last_price": 67.56,
+   "last_price": 67.77,
    "bars_held": 19
   },
   {
@@ -33,7 +33,7 @@
    "score": 5.34,
    "entry_date": "2026-11-02",
    "entry": 114.44,
-   "last_price": 118.26,
+   "last_price": 118.06,
    "bars_held": 19
   }
  ],
